@@ -10,5 +10,6 @@
 **/.venv/
 **/.tools/
 *.user
+*.tsbuildinfo
 *.log
 .DS_Store

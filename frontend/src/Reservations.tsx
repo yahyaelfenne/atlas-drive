@@ -1,9 +1,265 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, CalendarDays, CarFront, FileText, Loader2, MapPin, XCircle } from 'lucide-react'
-import { api, API, date, money, post, statusLabel } from './lib'
-import type { Booking, User } from './lib'
-import { Button } from './components/ui/button'
-import { Modal } from './components/ui/dialog'
-export async function openContract(booking:Booking,notify:(message:string)=>void){const viewer=window.open('','_blank');try{const response=await fetch(`${API}/api/bookings/${booking.id}/contract`,{headers:{Authorization:`Bearer ${sessionStorage.getItem('atlas-token')}`}});if(!response.ok){const result=await response.json();throw new Error(result.message||'Contrat indisponible.')}const html=await response.text();if(viewer){viewer.document.open();viewer.document.write(html);viewer.document.close()}else{const blob=URL.createObjectURL(new Blob([html],{type:'text/html'}));const a=document.createElement('a');a.href=blob;a.download=`contrat-${booking.reference}.html`;a.click();setTimeout(()=>URL.revokeObjectURL(blob),5000)}}catch(e){viewer?.close();notify((e as Error).message)}}
-export function Reservations({user,onLogin,notify}:{user:User|null;onLogin:()=>void;notify:(message:string)=>void}){const [bookings,setBookings]=useState<Booking[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[cancel,setCancel]=useState<Booking|null>(null),[busy,setBusy]=useState(false),[filter,setFilter]=useState('all');const load=useCallback(async()=>{if(!user)return;setLoading(true);setError('');try{setBookings(await api<Booking[]>('/api/bookings'))}catch(e){setError((e as Error).message)}finally{setLoading(false)}},[user]);useEffect(()=>{load()},[load]);async function cancelBooking(){if(!cancel)return;setBusy(true);try{await post(`/api/bookings/${cancel.id}/cancel`);setCancel(null);notify('Votre réservation a été annulée.');load()}catch(e){notify((e as Error).message)}finally{setBusy(false)}}if(!user)return <div className="section-container empty-state page-empty"><CarFront/><h1>Vos voyages, au même endroit.</h1><p>Connectez-vous pour retrouver vos réservations et vos contrats.</p><Button onClick={onLogin}>Me connecter <ArrowRight size={17}/></Button></div>;return <section className="section-container page-section"><div className="eyebrow">VOTRE ESPACE VOYAGEUR</div><div className="section-heading"><div><h1>Bonjour, {user.fullName.split(' ')[0]}.</h1><p>Vos prochains départs et vos beaux souvenirs, juste ici.</p></div><Button asChild variant="outline"><a href="#fleet">Préparer un nouveau voyage <ArrowUpRightSmall/></a></Button></div><div className="category-tabs booking-tabs">{[['all','Toutes mes réservations'],['Confirmed','À venir'],['Active','En cours'],['Completed','Terminées'],['Cancelled','Annulées']].map(([v,l])=><button key={v} className={filter===v?'selected':''} onClick={()=>setFilter(v)}>{l}</button>)}</div>{loading?<div className="loading-state"><Loader2 className="spin"/> Vos voyages arrivent…</div>:error?<div className="empty-state"><h3>{error}</h3><Button onClick={load}>Réessayer</Button></div>:bookings.filter(b=>filter==='all'||b.status===filter).length===0?<div className="empty-state"><CarFront/><h3>Une page blanche, plein de possibilités.</h3><p>Aucune réservation dans cette catégorie.</p><Button asChild><a href="#fleet">Choisir ma prochaine voiture <ArrowRight size={16}/></a></Button></div>:<div className="reservation-list">{bookings.filter(b=>filter==='all'||b.status===filter).map(b=><article className="reservation-card" key={b.id}><img src={b.vehicleImageUrl||'/images/hero-porsche.jpg'} alt={b.vehicleName}/><div className="reservation-info"><div className="reservation-title"><div><span className="reservation-reference">{b.reference}</span><h3>{b.vehicleName}</h3></div><span className={'status-badge '+b.status.toLowerCase()}>{statusLabel[b.status]||b.status}</span></div><div className="reservation-trip"><span><CalendarDays size={16}/>{date(b.startDate)} <ArrowRight size={13}/> {date(b.endDate)}</span><span><MapPin size={16}/>{b.pickupLocationName}{b.returnLocationName!==b.pickupLocationName&&<> <ArrowRight size={13}/> {b.returnLocationName}</>}</span></div>{b.returnedAt&&<p className="return-info">Retour enregistré le {date(b.returnedAt)}{b.returnNotes&&` · ${b.returnNotes}`}</p>}<div className="reservation-bottom"><div><strong>{money(b.total)}</strong><span>{b.days} jour{b.days>1?'s':''} · caution {money(b.deposit)}</span></div><div className="row-actions"><Button variant="outline" size="sm" onClick={()=>openContract(b,notify)}><FileText size={15}/> Mon contrat</Button>{b.status==='Confirmed'&&<Button variant="ghost" size="sm" onClick={()=>setCancel(b)}><XCircle size={15}/> Annuler</Button>}</div></div></div></article>)}</div>}<Modal open={!!cancel} onOpenChange={v=>{if(!v)setCancel(null)}} title="Annuler ce départ ?" description={`La réservation ${cancel?.reference||''} sera annulée et le véhicule redeviendra disponible.`}><div className="form-stack"><p>Vous pourrez toujours réserver un autre véhicule pour votre prochain voyage.</p><div className="modal-actions"><Button variant="outline" onClick={()=>setCancel(null)}>Garder ma réservation</Button><Button variant="destructive" disabled={busy} onClick={cancelBooking}>{busy&&<Loader2 size={16} className="spin"/>}Confirmer l’annulation</Button></div></div></Modal></section>}
-function ArrowUpRightSmall(){return <ArrowRight size={16} style={{transform:'rotate(-35deg)'}}/>}
+import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  CalendarDays,
+  CarFront,
+  FileText,
+  Loader2,
+  MapPin,
+  XCircle,
+} from "lucide-react";
+import { api, API, date, money, post, statusLabel } from "./lib";
+import type { Booking, User } from "./lib";
+import { Button } from "./components/ui/button";
+import { Modal } from "./components/ui/dialog";
+export async function openContract(
+  booking: Booking,
+  notify: (message: string) => void,
+) {
+  const viewer = window.open("", "_blank");
+  try {
+    const response = await fetch(`${API}/api/bookings/${booking.id}/contract`, {
+      headers: {
+        Authorization: `Bearer ${sessionStorage.getItem("atlas-token")}`,
+      },
+    });
+    if (!response.ok) {
+      const result = await response.json();
+      throw new Error(result.message || "Contrat indisponible.");
+    }
+    const html = await response.text();
+    if (viewer) {
+      viewer.document.open();
+      viewer.document.write(html);
+      viewer.document.close();
+    } else {
+      const blob = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const a = document.createElement("a");
+      a.href = blob;
+      a.download = `contrat-${booking.reference}.html`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(blob), 5000);
+    }
+  } catch (e) {
+    viewer?.close();
+    notify((e as Error).message);
+  }
+}
+export function Reservations({
+  user,
+  onLogin,
+  notify,
+}: {
+  user: User | null;
+  onLogin: () => void;
+  notify: (message: string) => void;
+}) {
+  const [bookings, setBookings] = useState<Booking[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [cancel, setCancel] = useState<Booking | null>(null),
+    [busy, setBusy] = useState(false),
+    [filter, setFilter] = useState("all");
+  const load = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError("");
+    try {
+      setBookings(await api<Booking[]>("/api/bookings"));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  async function cancelBooking() {
+    if (!cancel) return;
+    setBusy(true);
+    try {
+      await post(`/api/bookings/${cancel.id}/cancel`);
+      setCancel(null);
+      notify("Votre réservation a été annulée.");
+      load();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!user)
+    return (
+      <div className="section-container empty-state page-empty">
+        <CarFront />
+        <h1>Vos voyages, au même endroit.</h1>
+        <p>Connectez-vous pour retrouver vos réservations et vos contrats.</p>
+        <Button onClick={onLogin}>
+          Me connecter <ArrowRight size={17} />
+        </Button>
+      </div>
+    );
+  return (
+    <section className="section-container page-section">
+      <div className="eyebrow">VOTRE ESPACE VOYAGEUR</div>
+      <div className="section-heading">
+        <div>
+          <h1>Bonjour, {user.fullName.split(" ")[0]}.</h1>
+          <p>Vos prochains départs et vos beaux souvenirs, juste ici.</p>
+        </div>
+        <Button asChild variant="outline">
+          <a href="#fleet">
+            Préparer un nouveau voyage <ArrowUpRightSmall />
+          </a>
+        </Button>
+      </div>
+      <div className="category-tabs booking-tabs">
+        {[
+          ["all", "Toutes mes réservations"],
+          ["Confirmed", "À venir"],
+          ["Active", "En cours"],
+          ["Completed", "Terminées"],
+          ["Cancelled", "Annulées"],
+        ].map(([v, l]) => (
+          <button
+            key={v}
+            className={filter === v ? "selected" : ""}
+            onClick={() => setFilter(v)}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <div className="loading-state">
+          <Loader2 className="spin" /> Vos voyages arrivent…
+        </div>
+      ) : error ? (
+        <div className="empty-state">
+          <h3>{error}</h3>
+          <Button onClick={load}>Réessayer</Button>
+        </div>
+      ) : bookings.filter((b) => filter === "all" || b.status === filter)
+          .length === 0 ? (
+        <div className="empty-state">
+          <CarFront />
+          <h3>Une page blanche, plein de possibilités.</h3>
+          <p>Aucune réservation dans cette catégorie.</p>
+          <Button asChild>
+            <a href="#fleet">
+              Choisir ma prochaine voiture <ArrowRight size={16} />
+            </a>
+          </Button>
+        </div>
+      ) : (
+        <div className="reservation-list">
+          {bookings
+            .filter((b) => filter === "all" || b.status === filter)
+            .map((b) => (
+              <article className="reservation-card" key={b.id}>
+                <img
+                  src={b.vehicleImageUrl || "/images/hero-porsche.jpg"}
+                  alt={b.vehicleName}
+                />
+                <div className="reservation-info">
+                  <div className="reservation-title">
+                    <div>
+                      <span className="reservation-reference">
+                        {b.reference}
+                      </span>
+                      <h3>{b.vehicleName}</h3>
+                    </div>
+                    <span className={"status-badge " + b.status.toLowerCase()}>
+                      {statusLabel[b.status] || b.status}
+                    </span>
+                  </div>
+                  <div className="reservation-trip">
+                    <span>
+                      <CalendarDays size={16} />
+                      {date(b.startDate)} <ArrowRight size={13} />{" "}
+                      {date(b.endDate)}
+                    </span>
+                    <span>
+                      <MapPin size={16} />
+                      {b.pickupLocationName}
+                      {b.returnLocationName !== b.pickupLocationName && (
+                        <>
+                          {" "}
+                          <ArrowRight size={13} /> {b.returnLocationName}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  {b.returnedAt && (
+                    <p className="return-info">
+                      Retour enregistré le {date(b.returnedAt)}
+                      {b.returnNotes && ` · ${b.returnNotes}`}
+                    </p>
+                  )}
+                  <div className="reservation-bottom">
+                    <div>
+                      <strong>{money(b.total)}</strong>
+                      <span>
+                        {b.days} jour{b.days > 1 ? "s" : ""} · caution{" "}
+                        {money(b.deposit)}
+                      </span>
+                    </div>
+                    <div className="row-actions">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openContract(b, notify)}
+                      >
+                        <FileText size={15} /> Mon contrat
+                      </Button>
+                      {b.status === "Confirmed" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCancel(b)}
+                        >
+                          <XCircle size={15} /> Annuler
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+        </div>
+      )}
+      <Modal
+        open={!!cancel}
+        onOpenChange={(v) => {
+          if (!v) setCancel(null);
+        }}
+        title="Annuler ce départ ?"
+        description={`La réservation ${cancel?.reference || ""} sera annulée et le véhicule redeviendra disponible.`}
+      >
+        <div className="form-stack">
+          <p>
+            Vous pourrez toujours réserver un autre véhicule pour votre prochain
+            voyage.
+          </p>
+          <div className="modal-actions">
+            <Button variant="outline" onClick={() => setCancel(null)}>
+              Garder ma réservation
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={cancelBooking}
+            >
+              {busy && <Loader2 size={16} className="spin" />}Confirmer
+              l’annulation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </section>
+  );
+}
+function ArrowUpRightSmall() {
+  return <ArrowRight size={16} style={{ transform: "rotate(-35deg)" }} />;
+}
