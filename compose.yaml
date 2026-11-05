@@ -1,0 +1,57 @@
+name: atlas-drive
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: atlas_drive
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas_drive"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+  ai:
+    build: ./ai
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    restart: unless-stopped
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=atlas_drive;Username=atlas;Password=${DB_PASSWORD:?Set DB_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY}
+      Ai__BaseUrl: http://ai:8101
+      Seed__AdminEmail: ${ADMIN_EMAIL:-admin@atlasdrive.ma}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:-AtlasAdmin2026!}
+      Seed__CustomerEmail: ${CUSTOMER_EMAIL:-client@atlasdrive.ma}
+      Seed__CustomerPassword: ${CUSTOMER_PASSWORD:-AtlasClient2026!}
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY:-}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET:-}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__From: ${SMTP_FROM:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai:
+        condition: service_started
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:8088:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+volumes:
+  postgres_data:

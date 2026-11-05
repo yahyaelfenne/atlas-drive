@@ -1,0 +1,14 @@
+.local/
+.env
+.env.local
+**/node_modules/
+**/dist/
+**/bin/
+**/obj/
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/.tools/
+*.user
+*.log
+.DS_Store

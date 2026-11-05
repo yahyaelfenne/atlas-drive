@@ -1,0 +1,12 @@
+{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "files.exclude": { "**/bin": true, "**/obj": true, ".local": true },
+    "search.exclude": { "**/node_modules": true, ".local": true, "**/dist": true },
+    "editor.formatOnSave": true,
+    "typescript.tsdk": "frontend/node_modules/typescript/lib"
+  },
+  "extensions": {
+    "recommendations": ["ms-dotnettools.csdevkit", "dbaeumer.vscode-eslint", "bradlc.vscode-tailwindcss", "ms-python.python", "ms-azuretools.vscode-docker"]
+  }
+}
