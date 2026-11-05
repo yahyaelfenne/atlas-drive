@@ -1094,10 +1094,9 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
     [value, setValue] = useState(""),
     [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
-  useEffect(
-    () => bottom.current?.scrollIntoView({ behavior: "smooth" }),
-    [messages, busy],
-  );
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, busy]);
   async function send(e: FormEvent) {
     e.preventDefault();
     if (!value.trim() || busy) return;
