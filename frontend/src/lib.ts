@@ -75,6 +75,8 @@ export interface Location {
   phone: string;
 }
 export interface Booking {
+  paymentStatus: string;
+  reviewNote: string;
   id: number;
   reference: string;
   vehicleId: number;
@@ -120,6 +122,8 @@ export interface Notice {
   isRead: boolean;
 }
 export const statusLabel: Record<string, string> = {
+  Pending: "En attente de validation",
+  Rejected: "Refusée",
   Confirmed: "Confirmée",
   Active: "En cours",
   Completed: "Terminée",

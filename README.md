@@ -1,8 +1,18 @@
-# Atlas Drive
+# Location Ennour
+
+Le client choisit des dates disponibles, saisit une carte **de test**, puis clique sur **Payer en test et envoyer la demande**. Le serveur vérifie la disponibilité et le montant, valide le paiement simulé, puis crée la demande **En attente**. Une demande payée bloque déjà la voiture sur ces dates : deux demandes concurrentes ne peuvent pas réserver le même véhicule. L’administrateur accepte ou refuse ensuite dans **Locations** ; le contrat devient accessible après acceptation, sans nouveau paiement. Les anciennes réservations conservent leur statut.
+
+Le paiement est un **simulateur local** : nom du titulaire de test, numéro `4242 4242 4242 4242` (accepté) ou `4000 0000 0000 0002` (refusé), expiration future au format MM/AA et CVC `123`. N’utilisez aucune carte réelle. Aucun numéro, titulaire, expiration ou CVC n’est conservé ; seuls le statut et la référence de simulation sont enregistrés. Un paiement refusé ne crée aucune demande. Un paiement accepté produit `TestPaid` ; un refus admin ou une annulation produit `TestRefunded` et libère les dates. Les répétitions d’une même requête sont idempotentes. Le simulateur est limité à Development et peut être désactivé par `Payments__TestEnabled=false`. Aucun encaissement réel n’est configuré.
+
+**L’admin ne peut pas louer ni payer une location**, y compris par appel direct à l’API. Ses onglets sont dédiés à la gestion : **Locations** pour les demandes clients et les départs/retours, **Voitures** pour ajouter, modifier ou supprimer un véhicule, et **Agences** pour ajouter, modifier ou supprimer un bureau et ses coordonnées GPS. Les suppressions retirent les éléments du catalogue tout en conservant l’historique ; un bureau lié à une demande ou une location en cours ne peut pas être supprimé. Les comptes clients gardent le catalogue, la réservation et leurs locations personnelles.
+
+La version Android et iPhone se trouve dans `mobile/`. Depuis VS Code, lancez la tâche **Location Ennour: application mobile**, puis scannez le QR code dans Expo Go. Les instructions de connexion au PC et de compilation sont dans [mobile/README.md](mobile/README.md).
 
 Application locale de location de voitures au Maroc, avec interface française et prix en MAD. Le projet est ouvert dans VS Code via `atlas-drive.code-workspace`.
 
 ## Demarrer sur ce PC
+
+Sur ce PC, l’API utilise **Ubuntu 24.04 sous WSL** et .NET 10. Le choix est enregistré dans `.local/api-runtime.json` ; les tâches VS Code et `Start-Mobile.ps1` utilisent automatiquement ce runtime. La base PostgreSQL, les comptes et l’IA existants restent sur Windows. Les fichiers compilés Linux sont isolés dans le dossier personnel du compte de service `ennour`, sous `.local/share/location-ennour/`, et non dans les dossiers binaires Windows du projet. Le mode réseau miroir WSL permet les connexions locales entre l’API, PostgreSQL et l’IA. Les protections Windows restent actives. `Stop-Local.ps1` arrête aussi l’API Linux du projet.
 
 Depuis le dossier du projet dans un terminal PowerShell :
 
@@ -18,7 +28,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-Local.ps1 -Ins
 
 Le premier lancement necessite .NET SDK 10, Node.js 24, Python 3.13 et PostgreSQL 18. Ces outils sont deja presents sur ce PC. Docker reste facultatif. Le script cree un cluster PostgreSQL dedie au projet sur le port **5433**, avec authentification SCRAM et secrets aleatoires conserves dans `.local/settings.json`. Il ne modifie aucun service PostgreSQL existant. Les processus tournent en arriere-plan ; les journaux sont dans `.local/`.
 
-Dans VS Code : **Terminal > Run Task > Atlas Drive: demarrer**. Les taches d'installation, de verification et d'arret sont aussi fournies.
+Dans VS Code : **Terminal > Run Task > Location Ennour: demarrer**. Les taches d'installation, de verification et d'arret sont aussi fournies.
 
 | Service | Adresse |
 | --- | --- |

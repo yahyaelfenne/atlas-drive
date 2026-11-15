@@ -93,7 +93,7 @@ def test_key_free_chat_never_constructs_an_openai_client(monkeypatch):
     assert response.json()["source"] == "local"
     assert "90 MAD" in response.json()["reply"]
     assert client.get("/health").json()["chat"] == "local"
-    assert client.get("/health").json()["service"] == "Atlas Drive AI"
+    assert client.get("/health").json()["service"] == "Location Ennour AI"
 
 
 def test_unknown_local_question_does_not_claim_action():

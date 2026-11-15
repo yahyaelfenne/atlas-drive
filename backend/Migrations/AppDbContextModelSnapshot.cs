@@ -17,7 +17,7 @@ namespace AtlasDrive.Api.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -136,12 +136,22 @@ namespace AtlasDrive.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PaymentReference")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("PickupLocationId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Reference")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("RequestKey")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("ReturnLocationId")
                         .HasColumnType("integer");
@@ -154,6 +164,10 @@ namespace AtlasDrive.Api.Migrations
 
                     b.Property<DateTime?>("ReturnedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewNote")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
@@ -182,7 +196,8 @@ namespace AtlasDrive.Api.Migrations
 
                     b.HasIndex("ReturnLocationId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "RequestKey")
+                        .IsUnique();
 
                     b.HasIndex("VehicleId", "StartDate", "EndDate");
 
@@ -200,6 +215,9 @@ namespace AtlasDrive.Api.Migrations
                     b.Property<string>("Address")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("City")
                         .IsRequired()

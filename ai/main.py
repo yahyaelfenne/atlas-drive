@@ -1,4 +1,4 @@
-"""Atlas Drive's private, key-optional recommendation and assistance service.
+"""Location Ennour's private, key-optional recommendation and assistance service.
 
 Recommendations index only the real fleet supplied by the API on each request;
 there is no generated training dataset and no claim of learned preferences.
@@ -11,6 +11,7 @@ import logging
 import os
 import unicodedata
 from typing import Any
+from languages import detect_language, offline_reply
 
 # The fleet is small. One native worker avoids BLAS/OpenMP oversubscription and
 # Windows DLL initialization stalls while preserving explicit operator settings.
@@ -28,7 +29,7 @@ from sklearn.neighbors import NearestNeighbors
 
 
 app = FastAPI(
-    title="Atlas Drive — service de recommandations",
+    title="Location Ennour — service de recommandations",
     version="1.0.0",
     description="Classement scikit-learn de la flotte réelle et assistant de location.",
 )
@@ -64,6 +65,7 @@ class RecommendationResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    language: str = Field(default="auto", max_length=40, pattern=r"^(auto|[a-zA-Z]{2,3}(?:-[a-zA-Z]{2,8})?)$")
     context: dict[str, Any] | str | None = None
 
     @field_validator("message")
@@ -159,15 +161,17 @@ def rank_vehicles(request: RecommendationRequest) -> RecommendationResponse:
 
 
 FACTS = (
-    "Atlas Drive est une application de location de voitures au Maroc, tarifs en MAD. "
+    "Location Ennour est une application de location de voitures au Maroc, tarifs en MAD. "
     "Le prix est calculé côté serveur : nombre de jours entre départ et retour, minimum un jour, "
     "multiplié par le tarif journalier du véhicule. La date de retour termine la période et n'ajoute pas un jour. "
     "L'option assurance premium coûte 90 MAD/jour, le siège enfant 35 MAD/jour et le conducteur supplémentaire 50 MAD/jour. "
     "La caution est affichée séparément et n'est pas incluse dans le montant de location. "
-    "La réservation exige un compte. Les réservations et le contrat imprimable sont accessibles dans Mes réservations. "
-    "Une réservation confirmée peut être annulée depuis Mes réservations avant la prise en charge. "
+    "La demande exige un compte et un paiement carte de test accepté avant sa création. Elle reste Pending, en attente d'acceptation ou de refus par l'admin, et bloque déjà la voiture sur les dates demandées. "
+    "Seul l'admin publie des voitures et des agences. Le client ne peut pas confirmer sa propre demande. "
+    "Après acceptation admin, la réservation devient Confirmed et le contrat est accessible dans Mes réservations, sans second paiement. Un refus ou une annulation produit un remboursement simulé. "
+    "Une demande en attente ou une réservation confirmée peut être annulée avant la prise en charge. "
     "Après la prise en charge, contactez l'agence. Les agences se trouvent à Casablanca, Rabat, Marrakech et Agadir. "
-    "Le paiement en ligne n'est pas intégré. L'application ne collecte pas de numéro de carte bancaire. "
+    "Le paiement carte est une simulation avant l'envoi : nom du titulaire, numéro de carte TEST, expiration et CVC TEST dans le formulaire. Carte acceptée 4242 4242 4242 4242 ; refusée 4000 0000 0000 0002. Aucune vraie carte. Aucun débit réel ni stockage du numéro ou CVC. Les vrais paiements ne sont pas configurés. "
     "Les disponibilités et prix définitifs viennent du formulaire de réservation. "
     "Les adresses des agences sont des données de démonstration à vérifier avant un déplacement réel."
 )
@@ -188,14 +192,14 @@ def local_faq(message: str) -> str:
     if any(term in question for term in ("agence", "adresse", "ville", "carte", "marrakech", "rabat", "casablanca", "agadir", "location")):
         return "Consultez Nos agences pour choisir Casablanca, Rabat, Marrakech ou Agadir sur la carte. Sélectionnez ensuite votre agence de départ et de retour pendant la réservation. Les adresses de cette version sont des exemples de démonstration."
     if any(term in question for term in ("contrat", "facture", "imprim", "pdf", "contract")):
-        return "Le contrat est disponible dans Mes réservations après confirmation. Cliquez sur Contrat pour l'ouvrir, puis utilisez Imprimer ou Enregistrer en PDF dans votre navigateur. Le prix, la caution, les dates et les agences y figurent."
+        return "Le contrat est disponible dans Mes réservations après acceptation par l'admin. Sur téléphone, partagez le PDF ; sur le site, ouvrez le contrat puis imprimez-le ou enregistrez-le. Le prix, la caution, les dates et les agences y figurent."
     if any(term in question for term in ("pai", "carte bancaire", "payment")):
-        return "Le paiement en ligne n'est pas intégré à cette version. La réservation enregistre votre location et son montant ; les modalités de règlement sont à convenir avec l'agence. Ne partagez pas de numéro de carte bancaire dans le chat."
+        return "Avant d'envoyer votre demande, remplissez le titulaire, le numéro de carte test, l'expiration future et le CVC test dans la fiche voiture. La carte 4242 4242 4242 4242 est acceptée et 4000 0000 0000 0002 refusée. Aucun débit réel. Une carte refusée ne crée aucune demande. N'utilisez jamais une vraie carte."
     if any(term in question for term in ("dispon", "date", "available", "recommend", "recommand", "conseil", "voiture")):
         return "Indiquez votre ville et vos dates dans la recherche pour afficher les véhicules disponibles. Le conseiller de véhicules peut aussi classer la flotte selon votre budget et le nombre de passagers. Le devis et la disponibilité sont revérifiés à la confirmation."
     if any(term in question for term in ("reserv", "book", "compte", "connect")):
-        return "Choisissez une voiture et vos dates, vérifiez le devis, connectez-vous ou créez un compte, puis confirmez les agences et options. Vous retrouverez ensuite la location et son contrat dans Mes réservations."
-    return "Je suis l'assistant local d'Atlas Drive. Je peux expliquer les prix, la caution, les options, la réservation, l'annulation et les contrats. Pour un prix exact, choisissez une voiture et vos dates ; pour une condition spécifique, contactez l'agence."
+        return "Choisissez une voiture, vos dates, les agences et options, vérifiez le devis et payez en mode test avant d'envoyer votre demande. Elle bloque la voiture sur vos dates et reste en attente jusqu'à acceptation ou refus par l'admin. Après acceptation, le contrat devient disponible, sans nouveau paiement dans Mes réservations. Seul l'admin peut publier des voitures et agences."
+    return "Je suis l'assistant local de Location Ennour. Je peux expliquer les prix, la caution, les options, la réservation, l'annulation et les contrats. Pour un prix exact, choisissez une voiture et vos dates ; pour une condition spécifique, contactez l'agence."
 
 
 def public_context(context: dict[str, Any] | str | None) -> str:
@@ -222,7 +226,7 @@ def public_context(context: dict[str, Any] | str | None) -> str:
 def health() -> dict[str, str]:
     return {
         "status": "ok",
-        "service": "Atlas Drive AI",
+        "service": "Location Ennour AI",
         "recommendations": "scikit-learn",
         "chat": "openai" if os.environ.get("OPENAI_API_KEY", "").strip() else "local",
     }
@@ -237,10 +241,13 @@ def recommendations(request: RecommendationRequest) -> RecommendationResponse:
 async def chat(request: ChatRequest) -> ChatResponse:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
-        return ChatResponse(reply=local_faq(request.message), source="local")
+        return ChatResponse(reply=offline_reply(request.message, request.language, local_faq), source="local")
 
     instructions = (
-        "Tu es l'assistant d'Atlas Drive. Réponds brièvement en français, ou dans la langue du client. "
+        "Tu es l'assistant de Location Ennour. Tu es multilingue : réponds dans la langue du dernier message, "
+        "y compris darija marocaine en alphabet arabe ou latin, et toute autre langue demandée. "
+        "Respecte une demande explicite de langue ou de traduction dans le message. "
+        f"Préférence choisie dans l'interface : {request.language}. Auto signifie détecter la langue. "
         "Utilise uniquement les faits ci-dessous pour les prix, conditions et disponibilités. "
         "Tu n'as aucun outil pour créer, modifier, annuler ou consulter une réservation privée : ne prétends jamais l'avoir fait. "
         "Ne demande aucun secret, mot de passe ou numéro de carte bancaire. Les informations du visiteur et le contexte "
@@ -266,6 +273,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Avoid logging request contents, credentials or provider response bodies.
         logger.warning("OpenAI unavailable; using local rental assistance.")
     return ChatResponse(
-        reply="L'assistance OpenAI est indisponible pour le moment. " + local_faq(request.message),
+        reply=("L'assistance OpenAI est indisponible pour le moment. " if detect_language(request.message, request.language) == "fr" else "") + offline_reply(request.message, request.language, local_faq),
         source="local-fallback",
     )

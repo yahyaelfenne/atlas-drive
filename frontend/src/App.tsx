@@ -38,12 +38,13 @@ import { VehicleBooking } from "./VehicleBooking";
 import { Reservations } from "./Reservations";
 import { Admin } from "./Admin";
 import { Agencies } from "./Agencies";
+import { AdminAgencies } from "./AdminAgencies";
 
-type Page = "home" | "fleet" | "bookings" | "agencies" | "admin";
+type Page = "home" | "fleet" | "bookings" | "agencies" | "admin" | "management";
 const cities = ["Casablanca", "Marrakech", "Rabat", "Agadir"];
 const getPage = (): Page => {
   const p = location.hash.slice(1);
-  return ["fleet", "bookings", "agencies", "admin"].includes(p)
+  return ["fleet", "bookings", "agencies", "admin", "management"].includes(p)
     ? (p as Page)
     : "home";
 };
@@ -182,10 +183,10 @@ export default function App() {
       </div>
       <header className="site-header">
         <div className="header-inner">
-          <a href="#" className="brand" aria-label="Atlas Drive accueil">
+          <a href="#" className="brand" aria-label="Location Ennour accueil">
             <Brand />
             <span>
-              atlas<span className="brand-light">drive</span>
+              Location <span className="brand-light">Ennour</span>
               <span className="brand-dot">.</span>
             </span>
           </a>
@@ -197,17 +198,17 @@ export default function App() {
               Accueil
             </a>
             <a href="#fleet" className={page === "fleet" ? "active" : ""}>
-              Nos véhicules
+              {user?.role === "Admin" ? "Voitures" : "Nos véhicules"}
             </a>
             <a href="#agencies" className={page === "agencies" ? "active" : ""}>
-              Nos agences
+              {user?.role === "Admin" ? "Agences" : "Nos agences"}
             </a>
             {user && (
               <a
                 href="#bookings"
                 className={page === "bookings" ? "active" : ""}
               >
-                Mes réservations
+                {user.role === "Admin" ? "Locations" : "Mes réservations"}
               </a>
             )}
             {user?.role === "Admin" && (
@@ -255,7 +256,7 @@ export default function App() {
         </div>
       </header>
       <main>
-        {page === "home" && (
+        {page === "home" && user?.role !== "Admin" && (
           <>
             <section className="hero">
               <div className="hero-copy">
@@ -278,7 +279,7 @@ export default function App() {
                   <ShieldCheck size={29} />
                   <div>
                     <div className="trust-title">La route, l’esprit léger.</div>
-                    <span>Tarifs clairs · réservation immédiate</span>
+                    <span>Tarifs clairs · validation par notre équipe</span>
                   </div>
                 </div>
               </div>
@@ -380,7 +381,7 @@ export default function App() {
             </div>
           </>
         )}
-        {(page === "home" || page === "fleet") && (
+        {(page === "home" || page === "fleet") && user?.role !== "Admin" && (
           <section className="fleet-section section-container" id="fleet">
             <div className="section-heading">
               <div>
@@ -638,7 +639,7 @@ export default function App() {
             )}
           </section>
         )}
-        {page === "home" && (
+        {page === "home" && user?.role !== "Admin" && (
           <>
             <section className="journey-section section-container">
               <div>
@@ -666,7 +667,7 @@ export default function App() {
                     n: "02",
                     icon: CalendarDays,
                     title: "Réservez en quelques clics",
-                    text: "Un prix clair, des options utiles et une confirmation immédiate.",
+                    text: "Un prix clair, des options utiles et une validation par notre équipe.",
                   },
                   {
                     n: "03",
@@ -711,12 +712,32 @@ export default function App() {
             </section>
           </>
         )}
-        {page === "bookings" && (
+        {user?.role === "Admin" &&
+          ["home", "fleet", "bookings"].includes(page) && (
+            <Admin
+              key={page}
+              section={
+                page === "fleet"
+                  ? "fleet"
+                  : page === "bookings"
+                    ? "bookings"
+                    : undefined
+              }
+              user={user}
+              onLogin={() => setAuthOpen(true)}
+              notify={notify}
+              onFleetChange={loadFleet}
+            />
+          )}
+        {page === "bookings" && user?.role !== "Admin" && (
           <Reservations
             user={user}
             onLogin={() => setAuthOpen(true)}
             notify={notify}
           />
+        )}
+        {page === "management" && (
+          <AdminAgencies user={user} onLocationsChange={setLocations} />
         )}
         {page === "admin" && (
           <Admin
@@ -726,7 +747,10 @@ export default function App() {
             onFleetChange={loadFleet}
           />
         )}
-        {page === "agencies" && (
+        {page === "agencies" && user?.role === "Admin" && (
+          <AdminAgencies user={user} onLocationsChange={setLocations} />
+        )}
+        {page === "agencies" && user?.role !== "Admin" && (
           <Agencies
             locations={locations}
             onChoose={(c) => {
@@ -746,7 +770,7 @@ export default function App() {
             <a href="#" className="brand">
               <Brand />
               <span>
-                atlas<span className="brand-light">drive</span>
+                Location <span className="brand-light">Ennour</span>
                 <span className="brand-dot">.</span>
               </span>
             </a>
@@ -763,7 +787,7 @@ export default function App() {
             <button
               onClick={() => (user ? navigate("bookings") : setAuthOpen(true))}
             >
-              Mes réservations
+              {user?.role === "Admin" ? "Locations clients" : "Mes réservations"}
             </button>
           </div>
           <div>
@@ -781,8 +805,11 @@ export default function App() {
           </div>
         </div>
         <div className="footer-bottom">
+          <a href="/api/photo-credits" target="_blank" rel="noreferrer">
+            Photos illustratives · Crédits
+          </a>
           <span>
-            © {new Date().getFullYear()} Atlas Drive. Tous droits réservés.
+            © {new Date().getFullYear()} Location Ennour. Tous droits réservés.
           </span>
           <span>
             Le voyage commence ici. <ArrowUpRight size={14} />
@@ -831,7 +858,9 @@ export default function App() {
           onSuccess={(booking: Booking) => {
             setSelected(null);
             loadFleet();
-            notify(`Réservation ${booking.reference} confirmée. Bon voyage !`);
+            notify(
+              `Demande ${booking.reference} envoyée. En attente de validation admin.`,
+            );
             navigate("bookings");
           }}
         />
@@ -858,8 +887,7 @@ function Brand() {
       fill="none"
       aria-hidden="true"
     >
-      <path d="M3 31 19 6h3l15 25H27l-7-14-8 14H3Z" fill="currentColor" />
-      <path d="M22 28h15v3H22z" fill="#9cba68" />
+      <path d="M6 5h28v7H14v5h17v6H14v5h20v7H6Z" fill="currentColor" />
     </svg>
   );
 }
@@ -1085,10 +1113,11 @@ function AuthModal({
   );
 }
 function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [language, setLanguage] = useState("auto");
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([
       {
         role: "assistant",
-        text: "Bonjour ! Je suis l’assistant Atlas Drive. Une question sur votre location, les tarifs ou nos agences ?",
+        text: "Bonjour ! Je suis l’assistant Location Ennour. Une question sur votre location, les tarifs ou nos agences ?",
       },
     ]),
     [value, setValue] = useState(""),
@@ -1107,6 +1136,7 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
     try {
       const r = await post<{ reply: string; source: string }>("/api/chat", {
         message,
+        language,
       });
       setMessages((m) => [...m, { role: "assistant", text: r.reply }]);
     } catch (e) {
@@ -1120,13 +1150,13 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
   if (!open) return null;
   return (
-    <aside className="chat-panel" aria-label="Assistant Atlas Drive">
+    <aside className="chat-panel" aria-label="Assistant Location Ennour">
       <div className="chat-header">
         <span className="chat-avatar">
           <Sparkles size={20} />
         </span>
         <div>
-          <strong>Votre copilote Atlas</strong>
+          <strong>Votre copilote Location Ennour</strong>
           <small>Là pour vous accompagner</small>
         </div>
         <button onClick={onClose} aria-label="Fermer">
@@ -1134,8 +1164,31 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
         </button>
       </div>
       <div className="chat-messages">
+        <label>
+          Langue / Language{" "}
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            {[
+              ["auto", "Auto"],
+              ["fr", "Français"],
+              ["ary", "Darija"],
+              ["ar", "العربية"],
+              ["en", "English"],
+              ["es", "Español"],
+              ["de", "Deutsch"],
+              ["it", "Italiano"],
+              ["pt", "Português"],
+            ].map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         {messages.map((m, i) => (
-          <div key={i} className={"chat-message " + m.role}>
+          <div key={i} dir="auto" className={"chat-message " + m.role}>
             {m.text}
           </div>
         ))}

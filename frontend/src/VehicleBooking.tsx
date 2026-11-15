@@ -17,6 +17,7 @@ import { day, money, post } from "./lib";
 import { Modal } from "./components/ui/dialog";
 import { Button } from "./components/ui/button";
 import { Input, Select } from "./components/ui/input";
+import { TestCardFields, cardError, emptyCard } from "./TestCardFields";
 export function VehicleBooking({
   vehicle: v,
   open,
@@ -60,6 +61,8 @@ export function VehicleBooking({
     [quoteError, setQuoteError] = useState(""),
     [busy, setBusy] = useState(false),
     [accepted, setAccepted] = useState(false);
+  const [card, setCard] = useState(emptyCard);
+  const [requestKey] = useState(() => crypto.randomUUID());
   useEffect(() => {
     let cancelled = false;
     setQuoting(true);
@@ -93,8 +96,18 @@ export function VehicleBooking({
   }, [v.id, startDate, endDate, insurance, childSeat, additionalDriver]);
   async function reserve(e: FormEvent) {
     e.preventDefault();
+    if (user?.role === "Admin") {
+      setError("Un administrateur ne peut pas louer de voiture.");
+      return;
+    }
     if (!user) {
       onLogin();
+      return;
+    }
+    if (busy) return;
+    const paymentError = cardError(card);
+    if (paymentError) {
+      setError(paymentError);
       return;
     }
     setBusy(true);
@@ -111,6 +124,8 @@ export function VehicleBooking({
           childSeat,
           additionalDriver,
           notes,
+          payment: card,
+          requestKey,
         }),
       );
     } catch (e) {
@@ -119,6 +134,23 @@ export function VehicleBooking({
       setBusy(false);
     }
   }
+  if (user?.role === "Admin")
+    return (
+      <Modal
+        open={open}
+        onOpenChange={(value) => {
+          if (!value) onClose();
+        }}
+        title="Gestion des voitures"
+        description="Les comptes administrateurs ne peuvent pas louer de voiture."
+      >
+        <Button asChild>
+          <a href="#fleet" onClick={onClose}>
+            Gérer la flotte
+          </a>
+        </Button>
+      </Modal>
+    );
   return (
     <Modal
       open={open}
@@ -372,6 +404,9 @@ export function VehicleBooking({
               )
             )}
           </div>
+          {user && (
+            <TestCardFields value={card} onChange={setCard} disabled={busy} />
+          )}
           {error && (
             <div className="form-error" role="alert">
               {error}
@@ -385,8 +420,8 @@ export function VehicleBooking({
               onChange={(e) => setAccepted(e.target.checked)}
             />
             <span>
-              Je confirme les dates, le tarif et la caution. Le contrat de
-              location sera disponible dans mon espace.
+              Je confirme les dates, le tarif et la caution. Après validation
+              admin, le contrat de location sera disponible dans mon espace.
             </span>
           </label>
           <Button
@@ -395,12 +430,14 @@ export function VehicleBooking({
             disabled={busy || quoting || !quote || !accepted}
           >
             {busy ? <Loader2 className="spin" size={18} /> : null}
-            {user ? "Confirmer ma réservation" : "Me connecter pour réserver"}
+            {user
+              ? "Payer en test et envoyer la demande"
+              : "Me connecter pour réserver"}
             <ArrowRight size={17} />
           </Button>
           <small className="payment-note">
-            <ShieldCheck size={13} /> Aucun paiement en ligne. Règlement à
-            l’agence.
+            <ShieldCheck size={13} /> Paiement simulé avant la demande. En cas
+            de refus par l’admin, remboursement simulé. Aucun débit réel.
           </small>
         </form>
       </div>

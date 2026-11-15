@@ -1,6 +1,8 @@
 {
   "version": "2.0.0",
   "tasks": [
+    { "label": "Atlas Drive: application mobile", "type": "process", "command": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/Start-Mobile.ps1"], "problemMatcher": [], "isBackground": false },
+    { "label": "Atlas Drive: apercu mobile web", "type": "process", "command": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/Start-Mobile.ps1", "-Web"], "problemMatcher": [] },
     { "label": "Atlas Drive: demarrer", "type": "process", "command": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/Start-Local.ps1"], "problemMatcher": [] },
     { "label": "Atlas Drive: installer et demarrer", "type": "process", "command": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/Start-Local.ps1", "-Install"], "problemMatcher": [] },
     { "label": "Atlas Drive: arreter", "type": "process", "command": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/Stop-Local.ps1"], "problemMatcher": [] },

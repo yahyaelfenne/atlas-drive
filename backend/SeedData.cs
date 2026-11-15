@@ -25,12 +25,17 @@ public static class SeedData
                 var result = await users.CreateAsync(user, config[$"Seed:{key}Password"] ?? password);
                 if (!result.Succeeded) throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
             }
+            if (key == "Admin" && (user.FullName == "Admin Atlas Drive" || user.FullName == "Admin Tomobiltek"))
+            {
+                user.FullName = "Admin Location Ennour";
+                await users.UpdateAsync(user);
+            }
             if (!await users.IsInRoleAsync(user, role)) await users.AddToRoleAsync(user, role);
             return user;
         }
-        await User("Admin", "admin@atlasdrive.ma", "AtlasAdmin2026!", "Admin Atlas Drive", "Admin");
+        await User("Admin", "admin@atlasdrive.ma", "AtlasAdmin2026!", "Admin Location Ennour", "Admin");
         var customer = await User("Customer", "client@atlasdrive.ma", "AtlasClient2026!", "Yassine Amrani", "Customer");
-        if (!await db.Locations.AnyAsync())
+        if (!await db.Locations.IgnoreQueryFilters().AnyAsync())
         {
             db.Locations.AddRange(
                 new Location { Name = "Casablanca · Centre", City = "Casablanca", Address = "Boulevard d’Anfa, Casablanca", Latitude = 33.5926, Longitude = -7.6341, Phone = "+212 522 00 00 00" },
@@ -53,6 +58,22 @@ public static class SeedData
                 Car("Toyota", "Corolla", "Berline", 490, "Rabat", "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=1000&q=85", "Hybride"));
             await db.SaveChangesAsync();
         }
+        var cataloguePath = Path.Combine(AppContext.BaseDirectory, "Data", "fleet.json");
+        if (File.Exists(cataloguePath))
+        {
+            var catalogue = System.Text.Json.JsonSerializer.Deserialize<List<FleetEntry>>(await File.ReadAllTextAsync(cataloguePath), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            foreach (var entry in catalogue)
+            {
+                var existing = await db.Vehicles.IgnoreQueryFilters().FirstOrDefaultAsync(v => v.Brand == entry.Brand && v.Model == entry.Model);
+                if (existing is not null)
+                {
+                    if (existing.ImageUrl.Contains("unsplash.com") || existing.ImageUrl.Contains("wikimedia.org")) existing.ImageUrl = entry.ImageUrl;
+                    continue;
+                }
+                db.Vehicles.Add(new Vehicle { Brand = entry.Brand, Model = entry.Model, Category = entry.Category, City = entry.City, DailyRate = entry.DailyRate, ImageUrl = entry.ImageUrl, Year = 2025, Seats = 5, Fuel = "Essence", Transmission = "Manuelle", Deposit = entry.Category == "SUV" ? 7000 : 4000, Features = ["Climatisation", "Bluetooth", "USB"], Description = $"{entry.Brand} {entry.Model} — location avec Location Ennour. Photographie illustrative du modèle, finition et millésime à confirmer avec l’agence.", Rating = 4.8m });
+            }
+            await db.SaveChangesAsync();
+        }
         if (!await db.Bookings.AnyAsync())
         {
             var cars = await db.Vehicles.OrderBy(v => v.Id).ToListAsync();
@@ -68,3 +89,4 @@ public static class SeedData
         }
     }
 }
+public record FleetEntry(string Brand, string Model, string Category, string City, decimal DailyRate, string ImageUrl);

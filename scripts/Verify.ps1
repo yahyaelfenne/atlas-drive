@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $localRoot = Join-Path $projectRoot '.local'
 if (Get-NetTCPConnection -LocalPort 5181 -State Listen -ErrorAction SilentlyContinue) { throw 'Le port 5181 est occupe. Arretez le service de test existant avant de continuer.' }
-try { $aiHealth = Invoke-WebRequest 'http://127.0.0.1:8101/health' -UseBasicParsing -TimeoutSec 3 } catch { throw 'Demarrez Atlas Drive avant la verification (scripts/Start-Local.ps1).' }
+try { $aiHealth = Invoke-WebRequest 'http://127.0.0.1:8101/health' -UseBasicParsing -TimeoutSec 3 } catch { throw 'Demarrez Location Ennour avant la verification (scripts/Start-Local.ps1).' }
 & (Join-Path $PSScriptRoot 'Initialize-Local.ps1') -SkipDependencies
 $settings = Get-Content -LiteralPath (Join-Path $localRoot 'settings.json') -Raw | ConvertFrom-Json
 $pythonPath = Join-Path $localRoot 'venv/Scripts/python.exe'

@@ -74,6 +74,11 @@ export function Reservations({
   }, [user]);
   useEffect(() => {
     load();
+    const refresh = () => {
+      void load();
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [load]);
   async function cancelBooking() {
     if (!cancel) return;
@@ -115,8 +120,13 @@ export function Reservations({
         </Button>
       </div>
       <div className="category-tabs booking-tabs">
+        <button onClick={() => void load()} disabled={loading}>
+          Actualiser
+        </button>
         {[
           ["all", "Toutes mes réservations"],
+          ["Pending", "En attente"],
+          ["Rejected", "Refusées"],
           ["Confirmed", "À venir"],
           ["Active", "En cours"],
           ["Completed", "Terminées"],
@@ -206,14 +216,32 @@ export function Reservations({
                       </span>
                     </div>
                     <div className="row-actions">
+                      {b.status === "Pending" && (
+                        <p>
+                          Votre demande payée en test attend l’accord de
+                          l’admin.
+                        </p>
+                      )}
+                      {b.reviewNote && (
+                        <p>Message de l’agence : {b.reviewNote}</p>
+                      )}
+                      {b.paymentStatus === "TestPaid" && (
+                        <strong>Paiement test réussi · aucun débit réel</strong>
+                      )}
+                      {b.paymentStatus === "TestRefunded" && (
+                        <span>Remboursement simulé · aucun débit réel</span>
+                      )}
                       <Button
+                        disabled={["Pending", "Rejected", "Cancelled"].includes(
+                          b.status,
+                        )}
                         variant="outline"
                         size="sm"
                         onClick={() => openContract(b, notify)}
                       >
                         <FileText size={15} /> Mon contrat
                       </Button>
-                      {b.status === "Confirmed" && (
+                      {["Pending", "Confirmed"].includes(b.status) && (
                         <Button
                           variant="ghost"
                           size="sm"

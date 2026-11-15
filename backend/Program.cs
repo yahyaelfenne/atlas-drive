@@ -34,7 +34,7 @@ builder.Services.AddHttpClient("cloudinary", c => c.Timeout = TimeSpan.FromSecon
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
-    o.SwaggerDoc("v1", new() { Title = "Atlas Drive API", Version = "v1", Description = "Location de véhicules — authentification JWT, flotte, réservations, contrats et retours." });
+    o.SwaggerDoc("v1", new() { Title = "Location Ennour API", Version = "v1", Description = "Location de véhicules — authentification JWT, flotte, réservations, contrats et retours." });
     o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme { Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT", Description = "Connectez-vous via /api/auth/login puis collez la valeur token." });
     o.AddSecurityRequirement(document => new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", document)] = [] });
 });
@@ -62,7 +62,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 await SeedData.Run(app.Services, app.Environment.IsDevelopment());
-app.MapGet("/api/health", async (AppDbContext db) => Results.Ok(new { status = "ok", database = await db.Database.CanConnectAsync() ? "connected" : "unavailable", service = "Atlas Drive API", today = RentalRules.Today.ToString("yyyy-MM-dd") }));
+app.MapGet("/api/photo-credits", () => Results.File(Path.Combine(AppContext.BaseDirectory, "Data", "photo-credits.html"), "text/html; charset=utf-8"));
+app.MapGet("/api/health", async (AppDbContext db) => Results.Ok(new { status = "ok", database = await db.Database.CanConnectAsync() ? "connected" : "unavailable", service = "Location Ennour API", today = RentalRules.Today.ToString("yyyy-MM-dd") }));
 
 app.MapPost("/api/auth/register", async (RegisterInput input, UserManager<AppUser> users, TokenService tokens, RoleManager<IdentityRole> roles) =>
 {
@@ -105,7 +106,7 @@ app.MapGet("/api/vehicles", async (AppDbContext db, string? search, string? cate
     if (startDate.HasValue && endDate.HasValue)
     {
         RentalRules.Dates(startDate.Value, endDate.Value);
-        query = query.Where(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < endDate.Value && b.EndDate > startDate.Value));
+        query = query.Where(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < endDate.Value && b.EndDate > startDate.Value));
     }
     return await query.OrderBy(v => v.DailyRate).ToListAsync();
 });
@@ -115,7 +116,7 @@ app.MapPost("/api/quotes", async (QuoteInput input, AppDbContext db) =>
     var vehicle = await db.Vehicles.FindAsync(input.VehicleId) ?? throw new ApiException(404, "Véhicule introuvable.");
     if (vehicle.Status != "Available") throw new ApiException(409, "Véhicule en maintenance.");
     var quote = RentalRules.Quote(vehicle, input);
-    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Véhicule déjà réservé pour ces dates.");
+    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Véhicule déjà réservé pour ces dates.");
     return quote;
 });
 
@@ -132,31 +133,47 @@ bookings.MapGet("/{id:int}", async (int id, AppDbContext db, ClaimsPrincipal use
     RentalRules.Own(booking, user);
     return RentalRules.Dto(booking);
 });
-bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal principal, BookingEvents events) =>
+bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal principal, BookingEvents events, IConfiguration cfg) =>
 {
+    if (principal.IsInRole("Admin")) throw new ApiException(403, "Un administrateur ne peut pas louer de voiture. Utilisez un compte client pour effectuer une demande.");
     if (input.Notes?.Length > 2000) throw new ApiException(400, "Les notes sont limitées à 2000 caractères.");
+    if (input.RequestKey is null || input.RequestKey == Guid.Empty) throw new ApiException(400, "Identifiant de demande manquant. Rechargez le formulaire.");
     RentalRules.Dates(input.StartDate, input.EndDate);
     await using var transaction = await db.Database.BeginTransactionAsync();
     await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({input.VehicleId})");
+    var userId = RentalRules.UserId(principal);
+    var previous = await RentalRules.Full(db).FirstOrDefaultAsync(b => b.UserId == userId && b.RequestKey == input.RequestKey);
+    if (previous is not null)
+    {
+        if (previous.VehicleId != input.VehicleId || previous.StartDate != input.StartDate || previous.EndDate != input.EndDate || previous.PickupLocationId != input.PickupLocationId || previous.ReturnLocationId != input.ReturnLocationId || previous.Insurance != input.Insurance || previous.ChildSeat != input.ChildSeat || previous.AdditionalDriver != input.AdditionalDriver || previous.Notes != (input.Notes?.Trim() ?? "")) throw new ApiException(409, "Cette demande a déjà été envoyée avec d’autres paramètres. Rechargez le formulaire.");
+        return Results.Ok(RentalRules.Dto(previous));
+    }
     var vehicle = await db.Vehicles.FirstOrDefaultAsync(v => v.Id == input.VehicleId) ?? throw new ApiException(404, "Véhicule introuvable.");
     if (vehicle.Status != "Available") throw new ApiException(409, "Véhicule en maintenance.");
-    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Ce véhicule vient d’être réservé pour ces dates. Choisissez un autre créneau.");
-    var pickup = await db.Locations.FindAsync(input.PickupLocationId) ?? throw new ApiException(400, "Agence de départ invalide.");
-    var destination = await db.Locations.FindAsync(input.ReturnLocationId) ?? throw new ApiException(400, "Agence de retour invalide.");
+    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Ce véhicule vient d’être réservé pour ces dates. Choisissez un autre créneau.");
+    foreach (var locationId in new[] { input.PickupLocationId, input.ReturnLocationId }.Distinct().Order())
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(91501, {locationId})");
+    var pickup = await db.Locations.FirstOrDefaultAsync(l => l.Id == input.PickupLocationId) ?? throw new ApiException(400, "Agence de départ invalide ou supprimée.");
+    var destination = await db.Locations.FirstOrDefaultAsync(l => l.Id == input.ReturnLocationId) ?? throw new ApiException(400, "Agence de retour invalide ou supprimée.");
     if (pickup.City != vehicle.City) throw new ApiException(400, "Choisissez une agence de départ dans la ville du véhicule.");
     var quote = RentalRules.Quote(vehicle, new(input.VehicleId, input.StartDate, input.EndDate, input.Insurance, input.ChildSeat, input.AdditionalDriver));
+    TestCardPayment.Validate(input.Payment, cfg, app.Environment.IsDevelopment());
     var user = await db.Users.FindAsync(RentalRules.UserId(principal)) ?? throw new ApiException(401, "Compte introuvable.");
     var booking = new Booking { Reference = "ATL-" + DateTime.UtcNow.ToString("yyMMdd") + "-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)), Vehicle = vehicle, User = user, StartDate = input.StartDate, EndDate = input.EndDate, PickupLocation = pickup, ReturnLocation = destination, Days = quote.Days, DailyRate = quote.DailyRate, Total = quote.Total, Deposit = quote.Deposit, Insurance = input.Insurance, ChildSeat = input.ChildSeat, AdditionalDriver = input.AdditionalDriver, Notes = input.Notes?.Trim() ?? "" };
+    booking.PaymentStatus = "TestPaid";
+    booking.PaymentReference = "TEST-" + Guid.NewGuid().ToString("N");
+    booking.RequestKey = input.RequestKey;
     db.Bookings.Add(booking);
     await db.SaveChangesAsync();
     await transaction.CommitAsync();
-    await events.Notify(booking, "Réservation confirmée");
+    await events.Notify(booking, "Paiement test accepté — nouvelle demande en attente de validation");
     return Results.Created($"/api/bookings/{booking.Id}", RentalRules.Dto(booking));
 });
 bookings.MapGet("/{id:int}/contract", async (int id, AppDbContext db, ClaimsPrincipal user) =>
 {
     var booking = await RentalRules.Full(db).FirstOrDefaultAsync(b => b.Id == id) ?? throw new ApiException(404, "Réservation introuvable.");
     RentalRules.Own(booking, user);
+    if (booking.Status is "Pending" or "Rejected" or "Cancelled") throw new ApiException(409, "Le contrat sera disponible après confirmation par l’administrateur.");
     return Results.Content(RentalContract.Html(booking), "text/html; charset=utf-8");
 });
 bookings.MapPost("/{id:int}/cancel", async (int id, AppDbContext db, ClaimsPrincipal user, BookingEvents events) =>
@@ -166,20 +183,24 @@ bookings.MapPost("/{id:int}/cancel", async (int id, AppDbContext db, ClaimsPrinc
     await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({vehicleId})");
     var booking = await RentalRules.Full(db).FirstAsync(b => b.Id == id);
     RentalRules.Own(booking, user);
-    if (booking.Status != "Confirmed") throw new ApiException(409, "Seule une réservation confirmée peut être annulée.");
+    if (booking.Status == "Cancelled") return RentalRules.Dto(booking);
+    if (booking.Status is not ("Pending" or "Confirmed")) throw new ApiException(409, "Cette réservation ne peut plus être annulée.");
+    if (booking.PaymentStatus is "Paid" or "Processing") throw new ApiException(409, "Un paiement est engagé. Contactez l’agence pour l’annulation et le remboursement.");
     booking.Status = "Cancelled";
+    if (booking.PaymentStatus == "TestPaid") booking.PaymentStatus = "TestRefunded";
     await db.SaveChangesAsync(); await transaction.CommitAsync();
     await events.Notify(booking, "Réservation annulée");
     return RentalRules.Dto(booking);
 });
 
 var admin = app.MapGroup("/api/admin").RequireAuthorization(p => p.RequireRole("Admin"));
+app.MapWorkflow();
 admin.MapGet("/dashboard", async (AppDbContext db) =>
 {
     var all = await RentalRules.Full(db).AsNoTracking().ToListAsync();
     var today = RentalRules.Today;
     var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(i - 5)).Select(m => new { month = m.ToString("yyyy-MM"), revenue = all.Where(b => b.Status == "Completed" && b.EndDate.Year == m.Year && b.EndDate.Month == m.Month).Sum(b => b.Total + b.DamageFee) }).ToArray();
-    return new { totalRevenue = all.Where(b => b.Status == "Completed").Sum(b => b.Total + b.DamageFee), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Active" || b.Status == "Confirmed") && b.StartDate <= today && b.EndDate > today)), monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto) };
+    return new { totalRevenue = all.Where(b => b.Status == "Completed").Sum(b => b.Total + b.DamageFee), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Active" || b.Status == "Confirmed") && b.StartDate <= today && b.EndDate > today)), monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto) };
 });
 admin.MapGet("/notifications", async (AppDbContext db) => await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAt).Take(100).ToListAsync());
 admin.MapPost("/vehicles", async (Vehicle input, AppDbContext db) =>
@@ -193,7 +214,7 @@ admin.MapPut("/vehicles/{id:int}", async (int id, Vehicle input, AppDbContext db
     await using var transaction = await db.Database.BeginTransactionAsync();
     await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({id})");
     var v = await db.Vehicles.FirstOrDefaultAsync(v => v.Id == id) ?? throw new ApiException(404, "Véhicule introuvable.");
-    if (input.City != v.City && await db.Bookings.AnyAsync(b => b.VehicleId == id && (b.Status == "Confirmed" || b.Status == "Active"))) throw new ApiException(409, "Impossible de déplacer un véhicule avec des locations en cours ou confirmées.");
+    if (input.City != v.City && await db.Bookings.AnyAsync(b => b.VehicleId == id && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active"))) throw new ApiException(409, "Impossible de déplacer un véhicule avec des locations en cours ou confirmées.");
     v.Brand = input.Brand.Trim(); v.Model = input.Model.Trim(); v.Year = input.Year; v.Category = input.Category; v.Transmission = input.Transmission; v.Fuel = input.Fuel; v.Seats = input.Seats; v.DailyRate = input.DailyRate; v.Deposit = input.Deposit; v.ImageUrl = input.ImageUrl; v.City = input.City; v.Description = input.Description; v.Features = input.Features; v.Status = input.Status;
     await db.SaveChangesAsync(); await transaction.CommitAsync(); return v;
 });
@@ -202,7 +223,7 @@ admin.MapDelete("/vehicles/{id:int}", async (int id, AppDbContext db) =>
     await using var transaction = await db.Database.BeginTransactionAsync();
     await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({id})");
     var v = await db.Vehicles.FirstOrDefaultAsync(v => v.Id == id) ?? throw new ApiException(404, "Véhicule introuvable.");
-    if (await db.Bookings.AnyAsync(b => b.VehicleId == id && (b.Status == "Confirmed" || b.Status == "Active"))) throw new ApiException(409, "Ce véhicule possède des réservations actives ou confirmées.");
+    if (await db.Bookings.AnyAsync(b => b.VehicleId == id && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active"))) throw new ApiException(409, "Ce véhicule possède des réservations actives ou confirmées.");
     v.Archived = true; await db.SaveChangesAsync(); await transaction.CommitAsync(); return Results.NoContent();
 });
 admin.MapPost("/bookings/{id:int}/checkout", async (int id, CheckoutInput input, AppDbContext db, BookingEvents events) =>
@@ -257,11 +278,11 @@ app.MapPost("/api/chat", async (ChatInput input, AppDbContext db, IHttpClientFac
     {
         var fleet = await db.Vehicles.AsNoTracking().Where(v => v.Status == "Available").Select(v => new { v.Brand, v.Model, v.DailyRate, v.City }).ToListAsync();
         var locations = await db.Locations.AsNoTracking().ToListAsync();
-        using var response = await clients.CreateClient("ai").PostAsJsonAsync("chat", new { message = input.Message, context = new { vehicles = fleet, locations, currency = "MAD", premiumInsurancePerDay = 90, childSeatPerDay = 35, additionalDriverPerDay = 50 } });
+        using var response = await clients.CreateClient("ai").PostAsJsonAsync("chat", new { message = input.Message, language = input.Language, context = new { vehicles = fleet, locations, currency = "MAD", premiumInsurancePerDay = 90, childSeatPerDay = 35, additionalDriverPerDay = 50 } });
         if (response.IsSuccessStatusCode) return Results.Json(await response.Content.ReadFromJsonAsync<JsonElement>());
     }
     catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { app.Logger.LogWarning("AI chat service unavailable"); }
-    return Results.Ok(new { reply = "Bienvenue chez Atlas Drive ! Choisissez vos dates et votre ville dans Notre flotte. Le prix est calculé par jour, assurance basic incluse. L’assurance premium coûte 90 MAD/jour. Présentez un permis valide et une pièce d’identité à l’agence. Pour votre réservation, connectez-vous puis sélectionnez votre véhicule.", source = "local-fallback" });
+    return Results.Ok(new { reply = "Bienvenue chez Location Ennour ! Choisissez vos dates et votre ville dans Notre flotte. Le prix est calculé par jour, assurance basic incluse. L’assurance premium coûte 90 MAD/jour. Présentez un permis valide et une pièce d’identité à l’agence. Pour votre réservation, connectez-vous puis sélectionnez votre véhicule.", source = "local-fallback" });
 }).RequireRateLimiting("ai");
 app.MapPost("/api/recommendations", async (RecommendInput input, AppDbContext db, IHttpClientFactory clients) =>
 {

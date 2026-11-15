@@ -1,6 +1,6 @@
-# Atlas Drive implementation contract
+# Location Ennour implementation contract
 
-Local full-stack Moroccan car rental app, French UI, MAD currency, Casablanca/Rabat/Marrakech/Agadir. Brand Atlas Drive, premium warm off-white + deep forest green + lime accents. Runtime .NET 10 API :5180, Vite frontend :5273, FastAPI :8101, PostgreSQL :5433 dedicated cluster/database.
+Local full-stack Moroccan car rental app, French UI, MAD currency, Casablanca/Rabat/Marrakech/Agadir. Brand Location Ennour, premium warm off-white + deep forest green + lime accents. Runtime .NET 10 API :5180, Vite frontend :5273, FastAPI :8101, PostgreSQL :5433 dedicated cluster/database.
 
 ## API contract (JSON camelCase)
 - GET /api/health

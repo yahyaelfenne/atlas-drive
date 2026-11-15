@@ -33,13 +33,15 @@ export function Admin({
   onLogin,
   notify,
   onFleetChange,
+  section,
 }: {
   user: User | null;
   onLogin: () => void;
   notify: (message: string) => void;
   onFleetChange: () => void;
+  section?: "bookings" | "fleet";
 }) {
-  const [tab, setTab] = useState<Tab>("overview"),
+  const [selectedTab, setTab] = useState<Tab>("overview"),
     [dashboard, setDashboard] = useState<Dashboard | null>(null),
     [bookings, setBookings] = useState<Booking[]>([]),
     [vehicles, setVehicles] = useState<Vehicle[]>([]),
@@ -54,7 +56,8 @@ export function Admin({
     [deleteVehicle, setDeleteVehicle] = useState<Vehicle | null>(null),
     [busy, setBusy] = useState(false),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState("");
+    [status, setStatus] = useState(section === "bookings" ? "Pending" : "");
+  const tab = section || selectedTab;
   const load = useCallback(async () => {
     if (user?.role !== "Admin") return;
     setLoading(true);
@@ -133,9 +136,26 @@ export function Admin({
   return (
     <section className="section-container page-section admin-section">
       <div className="eyebrow">ESPACE ADMINISTRATION</div>
+      <div className="row-actions">
+        <Button asChild variant="outline">
+          <a href="#bookings">Locations · demandes clients</a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="#fleet">Voitures</a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="#agencies">Agences</a>
+        </Button>
+      </div>
       <div className="section-heading">
         <div>
-          <h1>Gardez une longueur d’avance.</h1>
+          <h1>
+            {section === "bookings"
+              ? "Demandes clients"
+              : section === "fleet"
+                ? "Gestion des voitures"
+                : "Gardez une longueur d’avance."}
+          </h1>
           <p>
             Réservations, flotte et retours. Tout ce qui fait rouler votre
             agence.
@@ -145,28 +165,34 @@ export function Admin({
           <RefreshCw size={16} className={loading ? "spin" : ""} /> Actualiser
         </Button>
       </div>
-      <div className="admin-tabs">
-        {(
-          [
-            { id: "overview", label: "Vue d’ensemble", icon: LayoutDashboard },
-            { id: "bookings", label: "Réservations", icon: ClipboardList },
-            { id: "fleet", label: "La flotte", icon: CarFront },
-            { id: "notifications", label: "Activité", icon: Bell },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            className={tab === t.id ? "selected" : ""}
-            onClick={() => setTab(t.id)}
-          >
-            <t.icon size={17} />
-            {t.label}
-            {t.id === "notifications" && notices.length > 0 && (
-              <span>{notices.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {!section && (
+        <div className="admin-tabs">
+          {(
+            [
+              {
+                id: "overview",
+                label: "Vue d’ensemble",
+                icon: LayoutDashboard,
+              },
+              { id: "bookings", label: "Réservations", icon: ClipboardList },
+              { id: "fleet", label: "La flotte", icon: CarFront },
+              { id: "notifications", label: "Activité", icon: Bell },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.id}
+              className={tab === t.id ? "selected" : ""}
+              onClick={() => setTab(t.id)}
+            >
+              <t.icon size={17} />
+              {t.label}
+              {t.id === "notifications" && notices.length > 0 && (
+                <span>{notices.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       {error && <div className="form-error">{error}</div>}
       {loading && !dashboard ? (
         <div className="loading-state">
@@ -271,6 +297,7 @@ export function Admin({
               </div>
               <BookingTable
                 bookings={dashboard.recentBookings}
+                onUpdated={load}
                 onAction={(booking, type) => setAction({ booking, type })}
                 notify={notify}
               />
@@ -294,13 +321,18 @@ export function Admin({
                   onChange={(e) => setStatus(e.target.value)}
                 >
                   <option value="">Tous les statuts</option>
-                  {["Confirmed", "Active", "Completed", "Cancelled"].map(
-                    (s) => (
-                      <option key={s} value={s}>
-                        {statusLabel[s]}
-                      </option>
-                    ),
-                  )}
+                  {[
+                    "Pending",
+                    "Rejected",
+                    "Confirmed",
+                    "Active",
+                    "Completed",
+                    "Cancelled",
+                  ].map((s) => (
+                    <option key={s} value={s}>
+                      {statusLabel[s]}
+                    </option>
+                  ))}
                 </Select>
                 <span>
                   {filtered.length} réservation{filtered.length > 1 ? "s" : ""}
@@ -308,6 +340,7 @@ export function Admin({
               </div>
               <BookingTable
                 bookings={filtered}
+                onUpdated={load}
                 onAction={(booking, type) => setAction({ booking, type })}
                 notify={notify}
               />
@@ -500,11 +533,31 @@ function BookingTable({
   bookings,
   onAction,
   notify,
+  onUpdated,
 }: {
   bookings: Booking[];
   onAction: (booking: Booking, type: "checkout" | "return") => void;
   notify: (message: string) => void;
+  onUpdated: () => Promise<void>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  async function review(booking: Booking, approve: boolean) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await post(`/api/admin/bookings/${booking.id}/review`, {
+        approve,
+        note: notes[booking.id] || "",
+      });
+      notify(approve ? "Demande acceptée." : "Demande refusée.");
+      await onUpdated();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="table-wrap">
       <table className="data-table">
@@ -554,6 +607,9 @@ function BookingTable({
                 <td>
                   <div className="row-actions">
                     <Button
+                      disabled={["Pending", "Rejected", "Cancelled"].includes(
+                        b.status,
+                      )}
                       size="icon"
                       variant="ghost"
                       onClick={() => openContract(b, notify)}
@@ -561,6 +617,34 @@ function BookingTable({
                     >
                       <FileText size={16} />
                     </Button>
+                    {b.status === "Pending" && (
+                      <>
+                        <Input
+                          aria-label={`Message au client ${b.reference}`}
+                          placeholder="Message au client (facultatif)"
+                          value={notes[b.id] || ""}
+                          onChange={(e) =>
+                            setNotes({ ...notes, [b.id]: e.target.value })
+                          }
+                          maxLength={1000}
+                        />
+                        <Button
+                          disabled={busy}
+                          size="sm"
+                          onClick={() => void review(b, true)}
+                        >
+                          Accepter la demande
+                        </Button>
+                        <Button
+                          disabled={busy}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void review(b, false)}
+                        >
+                          Refuser la demande
+                        </Button>
+                      </>
+                    )}
                     {b.status === "Confirmed" && (
                       <Button
                         variant="outline"

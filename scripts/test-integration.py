@@ -47,6 +47,18 @@ def main():
     check(all(v['city'] == 'Casablanca' and v['category'] == 'Citadine' and v['dailyRate'] <= 400 for v in filtered) and bool(filtered), 'combined fleet filters applied')
     agencies = request('GET', '/api/locations').json()
     check(len(agencies) >= 4, 'agencies seeded')
+    agency_input = {'name': 'Integration bureau', 'city': 'Casablanca', 'address': 'Adresse de test', 'phone': '+212600000000', 'latitude': 33.59, 'longitude': -7.63}
+    request('POST', '/api/admin/locations', 403, own, json=agency_input)
+    agency = request('POST', '/api/admin/locations', 201, token, json=agency_input).json()
+    request('PUT', f'/api/admin/locations/{agency["id"]}', 403, own, json=agency_input)
+    updated_agency = request('PUT', f'/api/admin/locations/{agency["id"]}', token=token, json={**agency_input, 'name': 'Bureau modifié'}).json()
+    check(updated_agency['name'] == 'Bureau modifié', 'admin can publish and edit rental agencies')
+    request('DELETE', f'/api/admin/locations/{agency["id"]}', 403, own)
+    disposable_agency = request('POST', '/api/admin/locations', 201, token, json={**agency_input, 'name':'Disposable bureau'}).json()
+    request('DELETE', f'/api/admin/locations/{disposable_agency["id"]}', 204, token)
+    public_agencies = request('GET', '/api/locations').json()
+    check(disposable_agency['id'] not in [a['id'] for a in public_agencies], 'deleted bureau disappears from public agency list')
+    request('POST', '/api/admin/locations', 400, token, json={**agency_input, 'latitude': 999})
     vehicle_input = {'brand': 'Integration', 'model': suffix, 'year': 2026, 'category': 'SUV', 'transmission': 'Automatique', 'fuel': 'Diesel', 'seats': 5, 'dailyRate': 500, 'deposit': 4000, 'imageUrl': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800', 'city': 'Casablanca', 'description': 'Isolated integration test vehicle', 'features': ['Climatisation', 'Bluetooth'], 'status': 'Available'}
     vehicle = request('POST', '/api/admin/vehicles', expected=201, token=token, json=vehicle_input).json()
     vehicle_id = vehicle['id']
@@ -60,16 +72,54 @@ def main():
     check(quote['deposit'] == 4000, 'deposit reported separately')
     request('POST', '/api/quotes', 400, json={**quote_input, 'endDate': start.isoformat()})
     request('POST', '/api/quotes', 400, json={**quote_input, 'insurance': 'unknown'})
-    body = {**quote_input, 'pickupLocationId': agencies[0]['id'], 'returnLocationId': agencies[1]['id'], 'notes': 'Integration test', 'total': 1}
-    # Two truly simultaneous HTTP requests must not create overlapping bookings.
-    def book():
-        return httpx.post(BASE + '/api/bookings', json=body, headers={'Authorization': f'Bearer {own}'}, timeout=30)
+    valid_card = {"cardholder":"Holder Test Only", "number":"4242 4242 4242 4242", "expiry":f"12/{(today.year + 2) % 100:02d}", "cvc":"123"}
+    body = {**quote_input, 'pickupLocationId': agency['id'], 'returnLocationId': agencies[1]['id'], 'notes': 'Integration test', 'total': 1, 'status':'Confirmed', 'paymentStatus':'Paid', 'payment':valid_card, 'requestKey':str(uuid.uuid4())}
+    request('POST', '/api/bookings', 403, token, json=body)
+    request('POST', '/api/bookings', 400, own, json={**body,'pickupLocationId':disposable_agency['id']})
+    before = len(request('GET', '/api/bookings', token=own).json())
+    request('POST', '/api/bookings', 400, own, json={**body, 'payment':None})
+    for overrides in [dict(cardholder=''),dict(number='1111111111111111'),dict(cvc=''),dict(expiry='01/20')]:
+        request('POST', '/api/bookings', 400, own, json={**body, 'payment':{**valid_card, **overrides}})
+    request('POST', '/api/bookings', 402, own, json={**body, 'payment':{**valid_card,'number':'4000 0000 0000 0002'}})
+    check(len(request('GET', '/api/bookings', token=own).json()) == before, 'declined or invalid card creates no booking or payment record')
+    keys = [str(uuid.uuid4()), str(uuid.uuid4())]
+    def book(key):
+        return httpx.post(BASE + '/api/bookings', json={**body,'requestKey':key}, headers={'Authorization': f'Bearer {own}'}, timeout=30)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        responses = list(executor.map(lambda _: book(), range(2)))
-    check(sorted(r.status_code for r in responses) == [201, 409], 'concurrent double booking yields exactly one success')
-    booking = next(r.json() for r in responses if r.status_code == 201)
+        responses = list(executor.map(book, keys))
+    check(sorted(r.status_code for r in responses) == [201,409], 'only one simultaneous prepaid request can hold the same vehicle and dates')
+    winner = next(i for i,r in enumerate(responses) if r.status_code == 201)
+    body['requestKey'] = keys[winner]
+    booking = responses[winner].json()
     booking_id = booking['id']
-    check(booking['total'] == 2025, 'untrusted client total ignored')
+    check(booking['status'] == 'Pending' and booking['paymentStatus'] == 'TestPaid', 'test payment must succeed before a pending request is created')
+    check(booking['total'] == 2025, 'server price ignores client supplied total')
+    check('Holder Test Only' not in str(booking) and '4242424242424242' not in str(booking), 'card input is never exposed in booking data')
+    repeated = request('POST', '/api/bookings', token=own, json=body).json()
+    check(repeated['id'] == booking_id, 'retry with same request key cannot create a second payment or booking')
+    request('POST', '/api/bookings', 409, own, json={**body,'requestKey':str(uuid.uuid4())})
+    request('POST', '/api/bookings', 409, stranger, json={**body,'requestKey':str(uuid.uuid4())})
+    request('POST', '/api/quotes', 409, json=quote_input)
+    held = request('GET', f'/api/vehicles?startDate={start.isoformat()}&endDate={end.isoformat()}').json()
+    check(vehicle_id not in [v['id'] for v in held], 'pending prepaid request already removes vehicle from available search')
+    request('GET', f'/api/bookings/{booking_id}/contract', 409, own)
+    request('POST', f'/api/bookings/{booking_id}/test-payment', 410, own, json={'scenario':'success'})
+    request('POST', f'/api/admin/bookings/{booking_id}/review', 403, own, json={'approve':True})
+    request('POST', f'/api/admin/bookings/{booking_id}/checkout', 409, token, json={'odometer':1000})
+    request('DELETE', f'/api/admin/locations/{agency['id']}', 409, token)
+    request('DELETE', f'/api/admin/vehicles/{vehicle_id}', 409, token)
+    adjoining_body = {**body,'startDate':end.isoformat(),'endDate':(end+dt.timedelta(days=2)).isoformat(),'requestKey':str(uuid.uuid4())}
+    other = request('POST', '/api/bookings', 201, own, json=adjoining_body).json()
+    rejected = request('POST', f'/api/admin/bookings/{other['id']}/review', token=token, json={'approve':False,'note':'Test de refus'}).json()
+    check(rejected['status'] == 'Rejected' and rejected['paymentStatus'] == 'TestRefunded', 'admin refusal refunds simulated prepayment and releases held dates')
+    free = request('GET', f'/api/vehicles?startDate={end.isoformat()}&endDate={(end+dt.timedelta(days=2)).isoformat()}').json()
+    check(vehicle_id in [v['id'] for v in free], 'rejected request no longer blocks availability')
+    def approve(_):
+        return httpx.post(BASE + f'/api/admin/bookings/{booking_id}/review', json={'approve':True}, headers={'Authorization':f'Bearer {token}'}, timeout=30)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        decisions = list(executor.map(approve, range(2)))
+    check(sorted(r.status_code for r in decisions) == [200,409], 'concurrent admin reviews cannot process request twice')
+    check(next(r.json() for r in decisions if r.status_code==200)['paymentStatus']=='TestPaid', 'approval retains the original test payment without another charge')
     unavailable = request('GET', f'/api/vehicles?startDate={start.isoformat()}&endDate={end.isoformat()}').json()
     check(vehicle_id not in [v['id'] for v in unavailable], 'availability filter excludes overlapping reservation')
     contract = request('GET', f'/api/bookings/{booking_id}/contract', token=own)
@@ -80,12 +130,20 @@ def main():
     check(denied_cancel.status_code in [403, 404], 'other customer cannot cancel reservation')
     cancelled = request('POST', f'/api/bookings/{booking_id}/cancel', token=own).json()
     check(cancelled['status'] == 'Cancelled', 'cancellation updates persisted status')
+    check(cancelled['paymentStatus'] == 'TestRefunded', 'cancelling test-paid reservation records simulated refund')
+    request('POST', f'/api/bookings/{booking_id}/cancel', token=own)
     request('POST', f'/api/admin/bookings/{booking_id}/checkout', 409, token, json={'odometer': 1000})
     available = request('GET', f'/api/vehicles?startDate={start.isoformat()}&endDate={end.isoformat()}').json()
     check(vehicle_id in [v['id'] for v in available], 'cancellation releases availability')
-    current_body = {**body, 'startDate': today.isoformat(), 'endDate': (today + dt.timedelta(days=2)).isoformat(), 'insurance': 'basic', 'childSeat': False, 'additionalDriver': False}
+    request('DELETE', f'/api/admin/locations/{agency["id"]}', 204, token)
+    history = request('GET', '/api/bookings', token=own).json()
+    check(any(b['id'] == booking_id and b['pickupLocationName'] == 'Bureau modifié' for b in history), 'deleted agency preserves booking history and location names')
+    request('GET', f'/api/bookings/{booking_id}', token=own)
+    body['pickupLocationId'] = agencies[0]['id']
+    current_body = {**body, 'startDate': today.isoformat(), 'endDate': (today + dt.timedelta(days=2)).isoformat(), 'insurance': 'basic', 'childSeat': False, 'additionalDriver': False, 'requestKey':str(uuid.uuid4())}
     current = request('POST', '/api/bookings', 201, own, json=current_body).json()
     current_id = current['id']
+    request('POST', f'/api/admin/bookings/{current_id}/review', token=token, json={'approve':True})
     request('POST', f'/api/admin/bookings/{current_id}/return', 409, token, json={'odometer': 1100, 'notes': '', 'damageFee': 0})
     active = request('POST', f'/api/admin/bookings/{current_id}/checkout', token=token, json={'odometer': 1000}).json()
     check(active['status'] == 'Active', 'checkout activates rental')
