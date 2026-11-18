@@ -38,6 +38,16 @@ public class Location
 }
 public class Booking
 {
+    public string ContractDeliveryChannel { get; set; } = "email";
+    public string ContactWhatsApp { get; set; } = "";
+    public bool WhatsAppConsent { get; set; }
+    public string? WhatsAppMessageId { get; set; }
+    public string ContactEmail { get; set; } = "";
+    public string ContractEmailStatus { get; set; } = "NotQueued";
+    public DateTime? ContractEmailSentAt { get; set; }
+    public int ContractEmailAttempts { get; set; }
+    public DateTime? ContractEmailNextAttemptAt { get; set; }
+    public string? ContractEmailHtml { get; set; }
     public int Id { get; set; }
     public string Reference { get; set; } = "";
     public int VehicleId { get; set; }
@@ -92,6 +102,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
         builder.Entity<Vehicle>().Property(v => v.DailyRate).HasPrecision(12, 2);
         builder.Entity<Vehicle>().Property(v => v.Deposit).HasPrecision(12, 2);
         builder.Entity<Vehicle>().Property(v => v.Rating).HasPrecision(3, 2);
+        builder.Entity<Booking>().Property(b => b.ContactWhatsApp).HasMaxLength(16);
+        builder.Entity<Booking>().Property(b => b.ContactEmail).HasMaxLength(254);
+        builder.Entity<Booking>().HasIndex(b => new { b.ContractEmailStatus, b.ContractEmailNextAttemptAt });
         builder.Entity<Booking>().HasIndex(b => b.Reference).IsUnique();
         builder.Entity<Booking>().HasIndex(b => new { b.UserId, b.RequestKey }).IsUnique();
         builder.Entity<Booking>().HasIndex(b => new { b.VehicleId, b.StartDate, b.EndDate });
@@ -105,13 +118,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 public record RegisterInput(string FullName, string Email, string Password, string? Phone);
 public record LoginInput(string Email, string Password);
 public record QuoteInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false);
-public record BookingInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, int PickupLocationId, int ReturnLocationId, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false, string? Notes = null, TestCardInput? Payment = null, Guid? RequestKey = null);
+public record BookingInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, int PickupLocationId, int ReturnLocationId, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false, string? Notes = null, TestCardInput? Payment = null, Guid? RequestKey = null, string? ContactEmail = null, string ContractDeliveryChannel = "email", string? ContactWhatsApp = null, bool WhatsAppConsent = false);
 public record TestCardInput(string Cardholder, string Number, string Expiry, string Cvc);
 public record CheckoutInput(int Odometer);
 public record ReturnInput(int Odometer, string? Notes, decimal DamageFee);
-public record ChatInput(string Message, string Language = "auto");
+public record ChatTurn(string Role, string Content);
+public record ChatInput(string Message, string Language = "auto", List<ChatTurn>? History = null);
 public record RecommendInput(decimal Budget, int Passengers, string? Category);
 public record PriceQuote(int Days, decimal DailyRate, decimal RentalAmount, decimal InsuranceAmount, decimal ExtrasAmount, decimal Total, decimal Deposit);
-public record BookingDto(int Id, string Reference, int VehicleId, string VehicleName, string VehicleImageUrl, string UserName, string UserEmail, DateOnly StartDate, DateOnly EndDate, string PickupLocationName, string ReturnLocationName, int Days, decimal DailyRate, decimal Total, decimal Deposit, string Status, DateTime CreatedAt, DateTime? ReturnedAt, string? ReturnNotes, decimal DamageFee, string PaymentStatus, string ReviewNote);
+public record BookingDto(int Id, string Reference, int VehicleId, string VehicleName, string VehicleImageUrl, string UserName, string UserEmail, DateOnly StartDate, DateOnly EndDate, string PickupLocationName, string ReturnLocationName, int Days, decimal DailyRate, decimal Total, decimal Deposit, string Status, DateTime CreatedAt, DateTime? ReturnedAt, string? ReturnNotes, decimal DamageFee, string PaymentStatus, string ReviewNote, string ContactEmail, string ContractEmailStatus, DateTime? ContractEmailSentAt, string ContractDeliveryChannel, string ContactWhatsApp, string? WhatsAppMessageId);
 public record ReviewInput(bool Approve, string? Note = null);
 public class ApiException(int status, string message) : Exception(message) { public int Status { get; } = status; }

@@ -50,7 +50,7 @@ export async function request<T>(
   const relayAbort = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
   options.signal?.addEventListener("abort", relayAbort);
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  const timeout = setTimeout(() => controller.abort(), path === "/api/chat" ? 120000 : 20000);
   try {
     const headers = new Headers(options.headers);
     if (options.body && !(options.body instanceof FormData))

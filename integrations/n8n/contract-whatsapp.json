@@ -1,0 +1,250 @@
+{
+  "name": "Location Ennour - contrat WhatsApp apres acceptation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ennour-contract-whatsapp",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ennour-webhook",
+      "name": "Réservation acceptée",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "96630c0e-f6f1-4102-b0f9-a7480ea8bb60",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ennourWebhookAuth",
+          "name": "Location Ennour Webhook"
+        }
+      }
+    },
+    {
+      "id": "ennour-config",
+      "name": "Paramètres WhatsApp",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ace1c04c-47c1-4099-98a7-c73ca5a6b953",
+              "name": "phoneNumberId",
+              "value": "A_RENSEIGNER_DANS_META",
+              "type": "string"
+            },
+            {
+              "id": "08d88caf-a36b-428b-8364-ccb19dfc94e6",
+              "name": "graphVersion",
+              "value": "A_RENSEIGNER_DANS_META",
+              "type": "string"
+            },
+            {
+              "id": "b24c3fdf-f019-42ca-aef2-19cd7dad0c38",
+              "name": "templateName",
+              "value": "ennour_contract",
+              "type": "string"
+            },
+            {
+              "id": "c6b156f5-cfe1-4e26-a028-b404b4fe0e14",
+              "name": "templateLanguage",
+              "value": "fr",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "notesInFlow": true,
+      "notes": "Renseigner le Phone Number ID et la version API affichés par Meta. Aucun jeton secret dans ces champs."
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json.body;\nif (!p || p.eventType !== 'rental.approved' || p.consent !== true || !/^[1-9]\\d{7,14}$/.test(p.to || '') || !/^ennour-contract-ATL-/.test(p.eventId || '') || typeof p.reference !== 'string') throw new Error('Demande invalide : acceptation admin, numéro et consentement obligatoires.');\nif (!/^https:\\/\\/[^/@?#\\s]+\\/api\\/contracts\\/shared\\/[A-Za-z0-9_-]+$/.test(p.contractUrl || '')) throw new Error('Une adresse HTTPS publique du contrat est requise.');\nif (!/^\\d+$/.test($json.phoneNumberId || '') || !/^v\\d+\\.\\d+$/.test($json.graphVersion || '')) throw new Error('Complétez Phone Number ID et version Graph API dans Paramètres WhatsApp.');\nif (!/^[a-z0-9_]+$/.test($json.templateName || '') || !/^[a-z]{2}(?:_[A-Z]{2})?$/.test($json.templateLanguage || '')) throw new Error('Vérifiez le nom et la langue du modèle approuvé par Meta.');\nreturn [{json: {eventId:p.eventId, reference:p.reference, to:p.to, contractUrl:p.contractUrl,\n phoneNumberId:$json.phoneNumberId, graphVersion:$json.graphVersion, templateName:$json.templateName, templateLanguage:$json.templateLanguage}}];"
+      },
+      "id": "ennour-validate",
+      "name": "Vérifier la demande",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{$json.graphVersion}}/{{$json.phoneNumberId}}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.to, type: 'template', template: { name: $json.templateName, language: { code: $json.templateLanguage }, components: [{ type: 'body', parameters: [{ type: 'text', text: $json.reference }, { type: 'text', text: $json.contractUrl }] }] } }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "ennour-meta",
+      "name": "Envoyer le contrat sur WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const id = $json.messages?.[0]?.id;\nif (typeof id !== 'string' || !id.startsWith('wamid.')) throw new Error('WhatsApp did not acknowledge the message');\nreturn [{json:{status:'accepted',messageId:id}}];"
+      },
+      "id": "ennour-ack",
+      "name": "Vérifier la réponse Meta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ennour-response",
+      "name": "Confirmer à Location Ennour",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "id": "ennour-note-setup",
+      "name": "Connexion nécessaire",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        190,
+        -350
+      ],
+      "parameters": {
+        "content": "## À configurer avant publication\n1. **Paramètres WhatsApp** : Phone Number ID, version Graph API, modèle et langue.\n2. **Envoyer le contrat sur WhatsApp** : sélectionner les identifiants WhatsApp Business Cloud (jeton conservé dans n8n).\n3. Faire approuver le modèle utilitaire **ennour_contract** par Meta.\n\nL’application WhatsApp Business sur téléphone seule ne fournit pas ces identifiants.",
+        "height": 280,
+        "width": 650
+      }
+    },
+    {
+      "id": "ennour-note-flow",
+      "name": "Parcours contrat",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        120,
+        250
+      ],
+      "parameters": {
+        "content": "## Déclenchement et résultat\nLocation Ennour appelle ce webhook **après paiement et acceptation admin**, avec le numéro et le consentement du client.\n\nLe client reçoit la référence et un **lien confidentiel valable 7 jours** vers son contrat complet, imprimable en PDF. Il ne s’agit pas d’un PDF joint au message.\n\nLe résultat est confirmé seulement si Meta renvoie un identifiant **wamid**. Accepté par Meta ne signifie pas livré ou lu.",
+        "height": 260,
+        "width": 720
+      }
+    },
+    {
+      "id": "ennour-note-template",
+      "name": "Texte du modèle Meta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        920,
+        -350
+      ],
+      "parameters": {
+        "content": "## Modèle utilitaire à faire approuver\n**Nom :** ennour_contract · **Langue :** fr\n\nVotre réservation **{{1}}** chez Location Ennour a été acceptée. Votre contrat et les informations de location sont disponibles ici : **{{2}}**. Ce lien est confidentiel et valable 7 jours.\n\n{{1}} = référence · {{2}} = lien HTTPS signé\n\nNe publiez le workflow qu’après connexion Meta et configuration de l’URL HTTPS publique de Location Ennour.",
+        "height": 280,
+        "width": 570
+      }
+    }
+  ],
+  "connections": {
+    "Réservation acceptée": {
+      "main": [
+        [
+          {
+            "node": "Paramètres WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paramètres WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Vérifier la demande",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vérifier la demande": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le contrat sur WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer le contrat sur WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Vérifier la réponse Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vérifier la réponse Meta": {
+      "main": [
+        [
+          {
+            "node": "Confirmer à Location Ennour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "9fbe02c0-40a5-4a15-b9d6-42b5a0ade549"
+}

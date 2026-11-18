@@ -1,3 +1,5 @@
+import { ManualWhatsApp } from "./ManualWhatsApp";
+import { contractEmailLabel } from "../lib/types";
 import { useCallback, useState } from "react";
 import {
   Image,
@@ -36,6 +38,7 @@ export default function AdminPanel({
   fixedTab,
 }: { fixedTab?: "bookings" | "fleet" } = {}) {
   const { user, api } = useApp();
+  const [manualWhatsApp, setManualWhatsApp] = useState<Booking | null>(null);
   const [tab, setTab] = useState<string>(fixedTab || "dashboard");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -199,7 +202,7 @@ export default function AdminPanel({
               {[
                 [
                   money(dashboard.totalRevenue),
-                  "Chiffre d’affaires des locations terminées",
+                  "Chiffre d’affaires encaissé (hors remboursements)",
                 ],
                 [String(dashboard.totalBookings), "Réservations"],
                 [String(dashboard.activeRentals), "Locations en cours"],
@@ -296,11 +299,14 @@ export default function AdminPanel({
                       {booking.pickupLocationName} →{" "}
                       {booking.returnLocationName}
                     </Text>
+                    {Boolean(booking.contactEmail || booking.contactWhatsApp) && <Text style={styles.small}>Contrat ({booking.contractDeliveryChannel}) : {booking.contactWhatsApp || booking.contactEmail}{"\n"}{contractEmailLabel(booking.contractEmailStatus)}</Text>}
+                    {["Failed", "WaitingConfiguration"].includes(booking.contractEmailStatus) && <Button title="Réessayer l’envoi du contrat" disabled={actionBusy} onPress={async () => { setActionBusy(true); try { await api(`/api/admin/bookings/${booking.id}/contract-email/retry`, { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setActionBusy(false); } }} />}
                     {Boolean(booking.reviewNote) && (
                       <Text style={styles.small}>
                         Message au client : {booking.reviewNote}
                       </Text>
                     )}
+                    {["Confirmed", "Active", "Completed"].includes(booking.status) && Boolean(booking.contactWhatsApp) && <Button title="Envoyer le contrat sur WhatsApp" secondary disabled={actionBusy} onPress={() => setManualWhatsApp(booking)} />}
                     {booking.status === "Pending" && (
                       <>
                         <Field
@@ -419,6 +425,7 @@ export default function AdminPanel({
           )}
         </View>
       </ScrollView>
+      {manualWhatsApp && <ManualWhatsApp booking={manualWhatsApp} onClose={() => { setManualWhatsApp(null); void load(); }} />}
       <Modal
         visible={Boolean(removing)}
         transparent

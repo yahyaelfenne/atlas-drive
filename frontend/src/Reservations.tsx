@@ -1,3 +1,4 @@
+import { contractEmailLabel } from "./lib";
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -222,6 +223,7 @@ export function Reservations({
                           l’admin.
                         </p>
                       )}
+                      {(b.contactEmail || b.contactWhatsApp) && <p>{b.contractDeliveryChannel === "whatsapp" ? "WhatsApp" : "E-mail"} : {b.contactWhatsApp || b.contactEmail}<br />{contractEmailLabel(b.contractEmailStatus)}</p>}
                       {b.reviewNote && (
                         <p>Message de l’agence : {b.reviewNote}</p>
                       )}

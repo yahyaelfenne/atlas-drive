@@ -73,15 +73,23 @@ def main():
     request('POST', '/api/quotes', 400, json={**quote_input, 'endDate': start.isoformat()})
     request('POST', '/api/quotes', 400, json={**quote_input, 'insurance': 'unknown'})
     valid_card = {"cardholder":"Holder Test Only", "number":"4242 4242 4242 4242", "expiry":f"12/{(today.year + 2) % 100:02d}", "cvc":"123"}
-    body = {**quote_input, 'pickupLocationId': agency['id'], 'returnLocationId': agencies[1]['id'], 'notes': 'Integration test', 'total': 1, 'status':'Confirmed', 'paymentStatus':'Paid', 'payment':valid_card, 'requestKey':str(uuid.uuid4())}
+    body = {'contactEmail': 'rental@example.test', **quote_input, 'pickupLocationId': agency['id'], 'returnLocationId': agencies[1]['id'], 'notes': 'Integration test', 'total': 1, 'status':'Confirmed', 'paymentStatus':'Paid', 'payment':valid_card, 'requestKey':str(uuid.uuid4())}
     request('POST', '/api/bookings', 403, token, json=body)
     request('POST', '/api/bookings', 400, own, json={**body,'pickupLocationId':disposable_agency['id']})
     before = len(request('GET', '/api/bookings', token=own).json())
+    request('GET', '/api/contracts/shared/invalid-token', 404)
+    for contact, consent in [('0600000000', True), ('+212600000000', False), ('+00000000', True)]:
+        request('POST', '/api/bookings', 400, own, json={**body,'contractDeliveryChannel':'whatsapp','contactWhatsApp':contact,'whatsAppConsent':consent})
+
+    for contact in [None, "invalid", "Injected <qa@example.test>", "qa@example.test\r\nBcc:other@example.test"]:
+        request('POST', '/api/bookings', 400, own, json={**body, 'contactEmail':contact})
+
     request('POST', '/api/bookings', 400, own, json={**body, 'payment':None})
     for overrides in [dict(cardholder=''),dict(number='1111111111111111'),dict(cvc=''),dict(expiry='01/20')]:
         request('POST', '/api/bookings', 400, own, json={**body, 'payment':{**valid_card, **overrides}})
     request('POST', '/api/bookings', 402, own, json={**body, 'payment':{**valid_card,'number':'4000 0000 0000 0002'}})
     check(len(request('GET', '/api/bookings', token=own).json()) == before, 'declined or invalid card creates no booking or payment record')
+    revenue_before = request('GET', '/api/admin/dashboard', token=token).json()['totalRevenue']
     keys = [str(uuid.uuid4()), str(uuid.uuid4())]
     def book(key):
         return httpx.post(BASE + '/api/bookings', json={**body,'requestKey':key}, headers={'Authorization': f'Bearer {own}'}, timeout=30)
@@ -92,6 +100,13 @@ def main():
     body['requestKey'] = keys[winner]
     booking = responses[winner].json()
     booking_id = booking['id']
+    request('POST', f'/api/admin/bookings/{booking_id}/whatsapp/manual', 403, own)
+    request('POST', f'/api/admin/bookings/{booking_id}/whatsapp/manual', 409, token)
+
+    check(booking['contactEmail'] == 'rental@example.test' and booking['contractEmailStatus'] == 'NotQueued', 'reservation contact email persisted without sending pending contract')
+    request('POST', '/api/bookings', 409, own, json={**body,'contactEmail':'changed@example.test'})
+
+    check(request('GET', '/api/admin/dashboard', token=token).json()['totalRevenue'] == revenue_before, 'paid pending request is excluded from revenue')
     check(booking['status'] == 'Pending' and booking['paymentStatus'] == 'TestPaid', 'test payment must succeed before a pending request is created')
     check(booking['total'] == 2025, 'server price ignores client supplied total')
     check('Holder Test Only' not in str(booking) and '4242424242424242' not in str(booking), 'card input is never exposed in booking data')
@@ -120,6 +135,7 @@ def main():
         decisions = list(executor.map(approve, range(2)))
     check(sorted(r.status_code for r in decisions) == [200,409], 'concurrent admin reviews cannot process request twice')
     check(next(r.json() for r in decisions if r.status_code==200)['paymentStatus']=='TestPaid', 'approval retains the original test payment without another charge')
+    check(abs(request('GET', '/api/admin/dashboard', token=token).json()['totalRevenue'] - revenue_before - booking['total']) < 0.01, 'admin approval recognizes prepaid revenue once')
     unavailable = request('GET', f'/api/vehicles?startDate={start.isoformat()}&endDate={end.isoformat()}').json()
     check(vehicle_id not in [v['id'] for v in unavailable], 'availability filter excludes overlapping reservation')
     contract = request('GET', f'/api/bookings/{booking_id}/contract', token=own)
@@ -129,6 +145,7 @@ def main():
     denied_cancel = httpx.post(BASE + f'/api/bookings/{booking_id}/cancel', headers={'Authorization': f'Bearer {stranger}'}, timeout=10)
     check(denied_cancel.status_code in [403, 404], 'other customer cannot cancel reservation')
     cancelled = request('POST', f'/api/bookings/{booking_id}/cancel', token=own).json()
+    check(abs(request('GET', '/api/admin/dashboard', token=token).json()['totalRevenue'] - revenue_before) < 0.01, 'refunded cancellation removes recognized revenue')
     check(cancelled['status'] == 'Cancelled', 'cancellation updates persisted status')
     check(cancelled['paymentStatus'] == 'TestRefunded', 'cancelling test-paid reservation records simulated refund')
     request('POST', f'/api/bookings/{booking_id}/cancel', token=own)

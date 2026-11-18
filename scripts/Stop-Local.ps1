@@ -14,7 +14,7 @@ if (Test-Path -LiteralPath $processFile) {
     $processes = @(Get-Content -LiteralPath $processFile -Raw | ConvertFrom-Json | ForEach-Object { $_ })
     foreach ($entry in $processes) {
         $process = Get-Process -Id $entry.id -ErrorAction SilentlyContinue
-        if ($process -and $process.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.started).ToUniversalTime().Ticks) {
+        if ($process -and $process.StartTime -and $entry.started -and $process.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.started).ToUniversalTime().Ticks) {
             & taskkill.exe /PID $entry.id /T /F | Out-Null
         }
     }

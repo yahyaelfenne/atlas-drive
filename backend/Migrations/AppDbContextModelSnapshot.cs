@@ -107,6 +107,36 @@ namespace AtlasDrive.Api.Migrations
                     b.Property<bool>("ChildSeat")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("ContactWhatsApp")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ContractDeliveryChannel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ContractEmailAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContractEmailHtml")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ContractEmailNextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ContractEmailSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContractEmailStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -187,6 +217,12 @@ namespace AtlasDrive.Api.Migrations
                     b.Property<int>("VehicleId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("WhatsAppConsent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("WhatsAppMessageId")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PickupLocationId");
@@ -195,6 +231,8 @@ namespace AtlasDrive.Api.Migrations
                         .IsUnique();
 
                     b.HasIndex("ReturnLocationId");
+
+                    b.HasIndex("ContractEmailStatus", "ContractEmailNextAttemptAt");
 
                     b.HasIndex("UserId", "RequestKey")
                         .IsUnique();

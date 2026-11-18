@@ -68,7 +68,7 @@ const server = http.createServer((request, response) => {
       result.pipe(response);
     },
   );
-  upstream.setTimeout(30000, () =>
+  upstream.setTimeout(request.url?.startsWith("/api/chat") ? 125000 : 30000, () =>
     upstream.destroy(new Error("Upstream timeout")),
   );
   upstream.on("error", () => {

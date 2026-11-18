@@ -1,3 +1,4 @@
+import { contractEmailLabel } from "../../lib/types";
 import AdminPanel from "../../components/AdminPanel";
 import { useCallback, useState } from "react";
 import {
@@ -185,6 +186,7 @@ function CustomerBookings() {
                   Votre demande payée en test attend la validation admin.
                 </Text>
               )}
+              {Boolean(booking.contactEmail || booking.contactWhatsApp) && <Text style={styles.small}>Contrat ({booking.contractDeliveryChannel}) : {booking.contactWhatsApp || booking.contactEmail}{"\n"}{contractEmailLabel(booking.contractEmailStatus)}</Text>}
               {Boolean(booking.reviewNote) && (
                 <Text style={styles.body}>
                   Message de l’agence : {booking.reviewNote}

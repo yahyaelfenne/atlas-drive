@@ -1,3 +1,5 @@
+import { ManualWhatsApp } from "./ManualWhatsApp";
+import { contractEmailLabel } from "./lib";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -542,6 +544,7 @@ function BookingTable({
 }) {
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [manualWhatsApp, setManualWhatsApp] = useState<Booking | null>(null);
   async function review(booking: Booking, approve: boolean) {
     if (busy) return;
     setBusy(true);
@@ -585,6 +588,8 @@ function BookingTable({
                   <strong>{b.reference}</strong>
                   <span>{b.userName}</span>
                   <small>{b.userEmail}</small>
+                  {(b.contactEmail || b.contactWhatsApp) && <small>Contrat ({b.contractDeliveryChannel}) : {b.contactWhatsApp || b.contactEmail}<br />{contractEmailLabel(b.contractEmailStatus)}</small>}
+                  {["Failed", "WaitingConfiguration"].includes(b.contractEmailStatus) && <Button disabled={busy} onClick={async () => { setBusy(true); try { await post(`/api/admin/bookings/${b.id}/contract-email/retry`, {}); await onUpdated(); } catch (e) { notify((e as Error).message); } finally { setBusy(false); } }}>Réessayer l’envoi</Button>}
                 </td>
                 <td>
                   <strong>{b.vehicleName}</strong>
@@ -617,6 +622,7 @@ function BookingTable({
                     >
                       <FileText size={16} />
                     </Button>
+                    {["Confirmed", "Active", "Completed"].includes(b.status) && b.contactWhatsApp && <Button size="sm" variant="outline" disabled={busy} onClick={() => setManualWhatsApp(b)}>Envoyer le contrat sur WhatsApp</Button>}
                     {b.status === "Pending" && (
                       <>
                         <Input
@@ -666,6 +672,7 @@ function BookingTable({
           )}
         </tbody>
       </table>
+      {manualWhatsApp && <ManualWhatsApp booking={manualWhatsApp} onClose={() => { setManualWhatsApp(null); void onUpdated(); }} />}
     </div>
   );
 }

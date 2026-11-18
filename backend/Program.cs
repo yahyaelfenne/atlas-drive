@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -29,7 +30,10 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins((config["Cor
 builder.Services.AddSignalR();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<BookingEvents>();
-builder.Services.AddHttpClient("ai", c => { c.BaseAddress = new Uri((config["Ai:BaseUrl"] ?? "http://127.0.0.1:8101").TrimEnd('/') + "/"); c.Timeout = TimeSpan.FromSeconds(20); });
+builder.Services.AddDataProtection().SetApplicationName("LocationEnnour.Contracts");
+builder.Services.AddHttpClient("n8n", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHostedService<ContractEmailWorker>();
+builder.Services.AddHttpClient("ai", c => { c.BaseAddress = new Uri((config["Ai:BaseUrl"] ?? "http://127.0.0.1:8101").TrimEnd('/') + "/"); c.Timeout = TimeSpan.FromSeconds(110); });
 builder.Services.AddHttpClient("cloudinary", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
@@ -46,6 +50,7 @@ builder.Services.AddRateLimiter(o =>
     o.OnRejected = async (context, ct) => await context.HttpContext.Response.WriteAsJsonAsync(new { message = "Trop de tentatives. Réessayez dans une minute." }, ct);
 });
 var app = builder.Build();
+app.MapSharedContracts();
 app.Use(async (context, next) =>
 {
     context.Response.Headers.XContentTypeOptions = "nosniff";
@@ -136,6 +141,10 @@ bookings.MapGet("/{id:int}", async (int id, AppDbContext db, ClaimsPrincipal use
 bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal principal, BookingEvents events, IConfiguration cfg) =>
 {
     if (principal.IsInRole("Admin")) throw new ApiException(403, "Un administrateur ne peut pas louer de voiture. Utilisez un compte client pour effectuer une demande.");
+    if (input.ContractDeliveryChannel is not ("email" or "whatsapp")) throw new ApiException(400, "Choisissez e-mail ou WhatsApp pour votre contrat.");
+    var contactEmail = input.ContractDeliveryChannel == "email" || !string.IsNullOrWhiteSpace(input.ContactEmail) ? ContractEmailWorker.ValidateEmail(input.ContactEmail) : "";
+    var contactWhatsApp = input.ContractDeliveryChannel == "whatsapp" ? WhatsAppContracts.ValidatePhone(input.ContactWhatsApp) : "";
+    if (input.ContractDeliveryChannel == "whatsapp" && !input.WhatsAppConsent) throw new ApiException(400, "Autorisez l’envoi du contrat sur WhatsApp pour continuer.");
     if (input.Notes?.Length > 2000) throw new ApiException(400, "Les notes sont limitées à 2000 caractères.");
     if (input.RequestKey is null || input.RequestKey == Guid.Empty) throw new ApiException(400, "Identifiant de demande manquant. Rechargez le formulaire.");
     RentalRules.Dates(input.StartDate, input.EndDate);
@@ -145,7 +154,7 @@ bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal
     var previous = await RentalRules.Full(db).FirstOrDefaultAsync(b => b.UserId == userId && b.RequestKey == input.RequestKey);
     if (previous is not null)
     {
-        if (previous.VehicleId != input.VehicleId || previous.StartDate != input.StartDate || previous.EndDate != input.EndDate || previous.PickupLocationId != input.PickupLocationId || previous.ReturnLocationId != input.ReturnLocationId || previous.Insurance != input.Insurance || previous.ChildSeat != input.ChildSeat || previous.AdditionalDriver != input.AdditionalDriver || previous.Notes != (input.Notes?.Trim() ?? "")) throw new ApiException(409, "Cette demande a déjà été envoyée avec d’autres paramètres. Rechargez le formulaire.");
+        if (previous.VehicleId != input.VehicleId || previous.StartDate != input.StartDate || previous.EndDate != input.EndDate || previous.PickupLocationId != input.PickupLocationId || previous.ReturnLocationId != input.ReturnLocationId || previous.Insurance != input.Insurance || previous.ChildSeat != input.ChildSeat || previous.AdditionalDriver != input.AdditionalDriver || previous.Notes != (input.Notes?.Trim() ?? "") || previous.ContactEmail != contactEmail || previous.ContractDeliveryChannel != input.ContractDeliveryChannel || previous.ContactWhatsApp != contactWhatsApp) throw new ApiException(409, "Cette demande a déjà été envoyée avec d’autres paramètres. Rechargez le formulaire.");
         return Results.Ok(RentalRules.Dto(previous));
     }
     var vehicle = await db.Vehicles.FirstOrDefaultAsync(v => v.Id == input.VehicleId) ?? throw new ApiException(404, "Véhicule introuvable.");
@@ -160,6 +169,10 @@ bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal
     TestCardPayment.Validate(input.Payment, cfg, app.Environment.IsDevelopment());
     var user = await db.Users.FindAsync(RentalRules.UserId(principal)) ?? throw new ApiException(401, "Compte introuvable.");
     var booking = new Booking { Reference = "ATL-" + DateTime.UtcNow.ToString("yyMMdd") + "-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)), Vehicle = vehicle, User = user, StartDate = input.StartDate, EndDate = input.EndDate, PickupLocation = pickup, ReturnLocation = destination, Days = quote.Days, DailyRate = quote.DailyRate, Total = quote.Total, Deposit = quote.Deposit, Insurance = input.Insurance, ChildSeat = input.ChildSeat, AdditionalDriver = input.AdditionalDriver, Notes = input.Notes?.Trim() ?? "" };
+    booking.ContactEmail = contactEmail;
+    booking.ContractDeliveryChannel = input.ContractDeliveryChannel;
+    booking.ContactWhatsApp = contactWhatsApp;
+    booking.WhatsAppConsent = input.WhatsAppConsent;
     booking.PaymentStatus = "TestPaid";
     booking.PaymentReference = "TEST-" + Guid.NewGuid().ToString("N");
     booking.RequestKey = input.RequestKey;
@@ -199,8 +212,12 @@ admin.MapGet("/dashboard", async (AppDbContext db) =>
 {
     var all = await RentalRules.Full(db).AsNoTracking().ToListAsync();
     var today = RentalRules.Today;
-    var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(i - 5)).Select(m => new { month = m.ToString("yyyy-MM"), revenue = all.Where(b => b.Status == "Completed" && b.EndDate.Year == m.Year && b.EndDate.Month == m.Month).Sum(b => b.Total + b.DamageFee) }).ToArray();
-    return new { totalRevenue = all.Where(b => b.Status == "Completed").Sum(b => b.Total + b.DamageFee), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Active" || b.Status == "Confirmed") && b.StartDate <= today && b.EndDate > today)), monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto) };
+    // Revenue requires both an accepted payment and an approved rental.
+    var receipts = all.Where(b => (b.PaymentStatus is "TestPaid" or "Paid") && (b.Status is "Confirmed" or "Active" or "Completed"))
+        .Select(b => (Date: b.CreatedAt, Amount: b.Total))
+        .ToList();
+    var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(i - 5)).Select(m => new { month = m.ToString("yyyy-MM"), revenue = receipts.Where(r => r.Date.Year == m.Year && r.Date.Month == m.Month).Sum(r => r.Amount) }).ToArray();
+    return new { totalRevenue = receipts.Sum(r => r.Amount), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Active" || b.Status == "Confirmed") && b.StartDate <= today && b.EndDate > today)), monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto) };
 });
 admin.MapGet("/notifications", async (AppDbContext db) => await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAt).Take(100).ToListAsync());
 admin.MapPost("/vehicles", async (Vehicle input, AppDbContext db) =>
@@ -271,19 +288,41 @@ admin.MapPost("/uploads", async (HttpRequest request, IConfiguration cfg, IHttpC
     var result = await response.Content.ReadFromJsonAsync<JsonElement>(); return Results.Ok(new { url = result.GetProperty("secure_url").GetString() });
 }).DisableAntiforgery();
 
-app.MapPost("/api/chat", async (ChatInput input, AppDbContext db, IHttpClientFactory clients) =>
+async Task<IResult> HandleChat(ChatInput input, AppDbContext db, IHttpClientFactory clients, HttpContext http)
 {
     if (string.IsNullOrWhiteSpace(input.Message) || input.Message.Length > 2000) throw new ApiException(400, "Le message doit contenir entre 1 et 2000 caractères.");
+    if (input.History is { } history && (history.Count > 12 || history.Any(t => t is null || t.Role is not ("user" or "assistant") || string.IsNullOrWhiteSpace(t.Content) || t.Content.Length > 6000) || history.Sum(t => t.Content.Length) > 24000))
+        throw new ApiException(400, "Historique de conversation invalide.");
     try
     {
         var fleet = await db.Vehicles.AsNoTracking().Where(v => v.Status == "Available").Select(v => new { v.Brand, v.Model, v.DailyRate, v.City }).ToListAsync();
         var locations = await db.Locations.AsNoTracking().ToListAsync();
-        using var response = await clients.CreateClient("ai").PostAsJsonAsync("chat", new { message = input.Message, language = input.Language, context = new { vehicles = fleet, locations, currency = "MAD", premiumInsurancePerDay = 90, childSeatPerDay = 35, additionalDriverPerDay = 50 } });
-        if (response.IsSuccessStatusCode) return Results.Json(await response.Content.ReadFromJsonAsync<JsonElement>());
+        var streaming = http.Request.Path.Value?.EndsWith("/stream") == true;
+        using var upstream = new HttpRequestMessage(HttpMethod.Post, streaming ? "chat/stream" : "chat") {
+            Content = JsonContent.Create(new { message = input.Message, language = input.Language, history = input.History ?? [], context = new { vehicles = fleet, locations, currency = "MAD" } })
+        };
+        using var response = await clients.CreateClient("ai").SendAsync(upstream, HttpCompletionOption.ResponseHeadersRead, http.RequestAborted);
+        if (response.IsSuccessStatusCode) {
+            if (!streaming) return Results.Json(await response.Content.ReadFromJsonAsync<JsonElement>(http.RequestAborted));
+            http.Response.ContentType = "application/x-ndjson; charset=utf-8";
+            http.Response.Headers.CacheControl = "no-cache";
+            http.Response.Headers["X-Accel-Buffering"] = "no";
+            await using var body = await response.Content.ReadAsStreamAsync(http.RequestAborted);
+            var buffer = new byte[4096];
+            int count;
+            while ((count = await body.ReadAsync(buffer, http.RequestAborted)) > 0) {
+                await http.Response.Body.WriteAsync(buffer.AsMemory(0, count), http.RequestAborted);
+                await http.Response.Body.FlushAsync(http.RequestAborted);
+            }
+            return Results.Empty;
+        }
     }
     catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { app.Logger.LogWarning("AI chat service unavailable"); }
-    return Results.Ok(new { reply = "Bienvenue chez Location Ennour ! Choisissez vos dates et votre ville dans Notre flotte. Le prix est calculé par jour, assurance basic incluse. L’assurance premium coûte 90 MAD/jour. Présentez un permis valide et une pièce d’identité à l’agence. Pour votre réservation, connectez-vous puis sélectionnez votre véhicule.", source = "local-fallback" });
-}).RequireRateLimiting("ai");
+    if (http.Response.HasStarted) { http.Abort(); return Results.Empty; }
+    return Results.Json(new { message = "Le service de discussion est temporairement indisponible. Réessayez dans un instant." }, statusCode: 503);
+}
+app.MapPost("/api/chat", HandleChat).RequireRateLimiting("ai");
+app.MapPost("/api/chat/stream", HandleChat).RequireRateLimiting("ai");
 app.MapPost("/api/recommendations", async (RecommendInput input, AppDbContext db, IHttpClientFactory clients) =>
 {
     if (input.Budget < 50 || input.Budget > 100000 || input.Passengers < 1 || input.Passengers > 9 || input.Category?.Length > 100) throw new ApiException(400, "Budget, catégorie ou nombre de passagers invalide.");

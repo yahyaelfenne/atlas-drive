@@ -18,6 +18,26 @@ if (!(Test-Path -LiteralPath $venvPython) -or !(Test-Path -LiteralPath (Join-Pat
 # Optional external-service secrets can be set in this ignored local script.
 $integrationSettings = Join-Path $localRoot 'integrations.ps1'
 if (Test-Path -LiteralPath $integrationSettings) { . $integrationSettings }
+$gmailCredentialPath = Join-Path $localRoot 'gmail-credential.xml'
+if (Test-Path -LiteralPath $gmailCredentialPath) {
+    $gmailCredential = Import-Clixml -LiteralPath $gmailCredentialPath
+    $env:Smtp__Host = 'smtp.gmail.com'
+    $env:Smtp__Port = '587'
+    $env:Smtp__EnableSsl = 'true'
+    $env:Smtp__Username = $gmailCredential.UserName
+    $env:Smtp__Password = $gmailCredential.GetNetworkCredential().Password.Replace(' ', '')
+    $env:Smtp__From = $gmailCredential.UserName
+}
+
+$whatsAppConfigPath = Join-Path $localRoot 'whatsapp-runtime.json'
+if (Test-Path -LiteralPath $whatsAppConfigPath) {
+    $wa = Get-Content -LiteralPath $whatsAppConfigPath -Raw | ConvertFrom-Json
+    $env:WhatsApp__DeliveryMode = if ($wa.DeliveryMode) { $wa.DeliveryMode } else { "manual" }
+    $env:WhatsApp__WebhookUrl = $wa.WebhookUrl
+    $env:WhatsApp__PublicBaseUrl = $wa.PublicBaseUrl
+    $keyPath = Join-Path $localRoot 'n8n-webhook-key.txt'
+    if (Test-Path -LiteralPath $keyPath) { $env:WhatsApp__WebhookKey = (Get-Content -LiteralPath $keyPath -Raw).Trim() }
+}
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:ASPNETCORE_URLS = 'http://127.0.0.1:5180'
 $env:ConnectionStrings__DefaultConnection = 'Host=127.0.0.1;Port=5433;Database=atlas_drive;Username=atlas;Password=' + $settings.DatabasePassword
@@ -60,7 +80,7 @@ function Test-TrackedProcess([string]$name) {
     foreach ($entry in $processes) {
         if ($entry.name -ne $name) { continue }
         $running = Get-Process -Id $entry.id -ErrorAction SilentlyContinue
-        if ($running -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.started).ToUniversalTime().Ticks) { return $true }
+        if ($running -and $running.StartTime -and $entry.started -and $running.StartTime.ToUniversalTime().Ticks -eq ([datetime]$entry.started).ToUniversalTime().Ticks) { return $true }
     }
     return $false
 }
@@ -70,12 +90,24 @@ function Start-ServiceProcess([string]$name,[string]$file,[string]$arguments,[st
     $process = Start-Process -FilePath $file -ArgumentList $arguments -WorkingDirectory $directory -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru
     return [pscustomobject]@{name=$name;id=$process.Id;started=$process.StartTime.ToUniversalTime().ToString('o')}
 }
+$chatRuntimePath = Join-Path $localRoot 'chat-runtime.json'
+if (Test-Path -LiteralPath $chatRuntimePath) {
+    $chatRuntime = Get-Content -LiteralPath $chatRuntimePath -Raw | ConvertFrom-Json
+    $env:OLLAMA_MODEL = $chatRuntime.model
+    $env:OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
+    if (!(Test-Endpoint 'http://127.0.0.1:11434/api/tags')) {
+        $ollamaExe = Join-Path $env:LOCALAPPDATA 'Programs/Ollama/ollama.exe'
+        if (!(Test-Path -LiteralPath $ollamaExe)) { throw 'Ollama manquant. Installez Ollama pour le chatbot local.' }
+        $env:OLLAMA_HOST = '127.0.0.1:11434'
+        $processes += Start-ServiceProcess 'ollama' $ollamaExe 'serve' $projectRoot
+    }
+}
 if (!(Test-Endpoint 'http://127.0.0.1:8101/health') -and !(Test-TrackedProcess 'ai')) { $processes += Start-ServiceProcess 'ai' $venvPython '-m uvicorn main:app --host 127.0.0.1 --port 8101' (Join-Path $projectRoot 'ai') }
 if (!(Test-Endpoint 'http://127.0.0.1:5180/api/health') -and !(Test-TrackedProcess 'api')) {
   if ($wslRuntime -and $wslRuntime.mode -eq 'wsl') {
     & wsl.exe -d $wslRuntime.distribution -u ennour --exec dotnet publish "$linuxRoot/backend/AtlasDrive.Api.csproj" -c Release --artifacts-path "$linuxRuntime/build" -o "$linuxRuntime/api" --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Compilation API Linux echouee.' }
-    $forwardNames = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(Cloudinary__|Smtp__)' } | ForEach-Object Name)
+    $forwardNames = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(Cloudinary__|Smtp__|WhatsApp__)' } | ForEach-Object Name)
     $priorWslEnv = $env:WSLENV
     try {
         $env:WSLENV = (@($priorWslEnv) + $forwardNames | Where-Object { $_ }) -join ':'

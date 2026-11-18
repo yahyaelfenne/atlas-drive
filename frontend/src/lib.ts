@@ -75,6 +75,12 @@ export interface Location {
   phone: string;
 }
 export interface Booking {
+  contractDeliveryChannel: "email" | "whatsapp";
+  contactWhatsApp: string;
+  whatsAppMessageId: string | null;
+  contactEmail: string;
+  contractEmailStatus: string;
+  contractEmailSentAt: string | null;
   paymentStatus: string;
   reviewNote: string;
   id: number;
@@ -131,3 +137,11 @@ export const statusLabel: Record<string, string> = {
   Available: "Disponible",
   Maintenance: "Maintenance",
 };
+
+export function contractEmailLabel(status: string) {
+  return ({ NotQueued: "Le contrat sera envoyé après acceptation.", Pending: "Contrat : envoi en attente.",
+    WaitingConfiguration: "Contrat : en attente de connexion du service d’envoi.", Sent: "Contrat envoyé au serveur de messagerie.",
+    ManualRequired: "Contrat à envoyer manuellement sur WhatsApp par l’agence.", ManualPrepared: "Message WhatsApp préparé ; envoi manuel à confirmer par l’agence.",
+    AcceptedByProvider: "Message accepté par WhatsApp ; réception non confirmée.", Uncertain: "Résultat d’envoi inconnu : l’agence doit vérifier avant de renvoyer.",
+    Failed: "Envoi du contrat en échec : contactez l’agence.", Cancelled: "Envoi du contrat annulé." } as Record<string, string>)[status] || "";
+}

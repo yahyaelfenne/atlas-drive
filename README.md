@@ -137,3 +137,27 @@ Le site Compose est servi sur http://127.0.0.1:8088. Pour un hebergement public,
 - [Docker : PostgreSQL et stockage persistant](https://docs.docker.com/guides/postgresql/immediate-setup-and-data-persistence/)
 - [VS Code : taches](https://code.visualstudio.com/docs/debugtest/tasks)
 - [OpenAI : Responses API](https://platform.openai.com/docs/api-reference/responses)
+
+Le paiement se fait sur une page distincte, après le choix des dates, agences et options. Le chiffre d’affaires inclut les locations payées et acceptées par l’admin (Confirmed, Active, Completed), une seule fois ; les demandes Pending et paiements remboursés sont exclus. Les frais de dommages sans paiement enregistré ne sont pas inclus.
+
+Le chatbot conversationnel peut traiter les questions generales et les traductions, et utiliser le contexte des derniers messages dans la langue demandee. Il fonctionne avec OpenAI ou avec un modele Ollama installe sur le PC. En mode local, le PC doit rester allume et les reponses peuvent prendre plus de temps. La FAQ de secours est identifiee clairement si le modele est indisponible. Voir ai/README.md pour la configuration.
+
+## Contrats par e-mail
+
+L’adresse de reception du contrat est obligatoire dans la reservation, modifiable avant le paiement, distincte du compte utilisateur. Apres acceptation admin, un instantane du contrat est mis en file dans la meme transaction. Un service de fond envoie le recapitulatif et la piece jointe HTML imprimable en PDF. La file est conservee apres redemarrage ; aucun contrat n’est envoye pour une demande Pending ou refusee. Les reservations annulees avant envoi sont ignorees. Le statut figure dans les espaces client et admin ; Sent signifie accepte par le serveur mail, pas une preuve de lecture ou de remise en boite de reception.
+
+Pour Gmail, activer la validation en deux etapes et creer un mot de passe d’application dans https://myaccount.google.com/apppasswords. Depuis la racine du projet, executer `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup-Gmail.ps1`. Le script demande l’adresse d’expedition et le mot de passe d’application en saisie masquee, puis active la configuration. Ne pas utiliser le mot de passe habituel du compte. Les identifiants sont chiffres avec Windows DPAPI dans `.local/gmail-credential.xml` (ignore par Git), utilisables uniquement avec ce compte Windows sur ce PC. Les exports Docker/cloud necessitent leurs propres secrets SMTP.
+
+Sans configuration, la file indique WaitingConfiguration. Les erreurs d’envoi sont retentees jusqu’a cinq fois, puis signalees Failed ; l’admin peut relancer via son espace. Une interruption apres acceptation SMTP et avant l’enregistrement du succes peut exceptionnellement produire un doublon a la reprise. En developpement seulement, Smtp__PickupDirectory permet une capture locale .eml sans envoi Internet. Ce mode doit etre absent pour un envoi Gmail reel. Tests locaux : destinataire de reservation, contrat complet, e-mail invalide avant paiement, controle des droits et absence de doublon lors d’une relance d’un envoi deja reussi.
+
+## WhatsApp et n8n
+
+Les contrats peuvent etre envoyes par WhatsApp via n8n apres acceptation admin. Le client choisit le canal, renseigne un numero international et accepte cet envoi. Workflow et guide : integrations/n8n/README.md. L’application WhatsApp Business seule ne suffit pas : la connexion Meta Cloud API et une URL HTTPS pour le contrat sont requises. Aucune remise WhatsApp reelle n’a ete testee sans ces identifiants.
+
+## Envoi WhatsApp manuel (mode actif)
+
+Le mode actif est maintenant **manuel**, sans API Meta ni n8n. Apres acceptation, dans Locations, le bouton « Envoyer le contrat sur WhatsApp » prepare le destinataire et le message. Sur le site et l'apercu web mobile, ouvrir le contrat puis utiliser « Imprimer / Enregistrer en PDF », enregistrer le PDF, ouvrir WhatsApp, joindre ce fichier et confirmer l'envoi. Le navigateur ne joint pas automatiquement le fichier. Sur Android/iOS, le bouton de partage genere le PDF avec Expo Print puis ouvre le menu natif ; choisir WhatsApp Business et le bon client. La selection du destinataire dans le menu de partage est manuelle.
+
+Le numero et le consentement doivent provenir de la reservation ; aucun numero du compte n'est utilise implicitement. Seuls les admins peuvent preparer l'envoi, uniquement pour Confirmed/Active/Completed. Les statuts ManualRequired et ManualPrepared n'affirment aucun envoi effectif. Le mode n8n reste optionnel et inactif : definir explicitement DeliveryMode=n8n dans .local/whatsapp-runtime.json pour revenir au parcours automatise, apres configuration de Meta et de l'URL HTTPS publique. Le mode manuel n'exige pas cette URL et n'inclut aucun lien local ni jeton dans le message.
+
+Tests locaux : autorisations, demande en attente bloquee, destinataire/message encodes, absence de faux statut envoye, preparation repetee sans transmission, contrat protege par authentification, annulation bloquant la preparation. Interface web admin verifiee ; partage PDF natif non teste sur un telephone physique.

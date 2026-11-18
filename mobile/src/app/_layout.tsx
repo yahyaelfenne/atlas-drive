@@ -33,6 +33,7 @@ function Navigation() {
           name="recommend"
           options={{ title: "Trouvons votre voiture" }}
         />
+        <Stack.Screen name="payment" options={{ title: "Paiement par carte" }} />
         <Stack.Screen name="admin" options={{ title: "Administration" }} />
         <Stack.Screen
           name="management"

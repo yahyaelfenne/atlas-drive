@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { streamChat } from "../lib/chat-stream";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,17 +16,23 @@ interface Message {
   source?: string;
 }
 export default function Chat() {
-  const { api } = useApp();
+  const { user } = useApp();
+  return <Conversation key={user?.id || "guest"} />;
+}
+function Conversation() {
+  const { baseUrl } = useApp();
   const [language, setLanguage] = useState("auto");
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      text: "Bonjour ! Une question sur les prix, la caution, les options ou votre réservation ?",
+      text: "Bonjour ! Parlez-moi dans votre langue : location, voyage, traduction ou question générale.",
     },
   ]);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const chatRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => chatRequest.current?.abort(), []);
   const list = useRef<ScrollViewInstance>(null);
   async function send() {
     if (!value.trim() || busy) return;
@@ -33,16 +40,14 @@ export default function Chat() {
     setValue("");
     setError("");
     setBusy(true);
-    setMessages((previous) => [...previous, { role: "user", text: question }]);
+    const answerIndex = messages.length + 1;
+    setMessages(previous => [...previous, { role: "user", text: question }, { role: "assistant", text: "" }]);
+    chatRequest.current = new AbortController();
     try {
-      const answer = await api<{ reply: string; source: string }>("/api/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: question, language }),
-      });
-      setMessages((previous) => [
-        ...previous,
-        { role: "assistant", text: answer.reply, source: answer.source },
-      ]);
+      await streamChat(baseUrl + "/api/chat/stream", {
+        message: question, language,
+        history: messages.slice(1).filter(m => m.text).slice(-8).map(m => ({ role: m.role, content: m.text.slice(0, 1800) })),
+      }, (text, source) => setMessages(previous => previous.map((item, i) => i === answerIndex ? { ...item, text, source } : item)), chatRequest.current.signal);
     } catch (e) {
       setError((e as Error).message);
       setValue(question);
@@ -65,6 +70,7 @@ export default function Chat() {
       >
         <Text style={styles.label}>LÀ POUR VOUS ACCOMPAGNER</Text>
         <Chips value={language} onChange={setLanguage} options={[["auto", "Auto"], ["fr", "Français"], ["ary", "Darija"], ["ar", "العربية"], ["en", "English"], ["es", "Español"], ["de", "Deutsch"], ["it", "Italiano"], ["pt", "Português"]].map(([value, label]) => ({ value, label }))} />
+        <Button title="Nouvelle discussion" secondary disabled={busy} onPress={() => setMessages([{ role: "assistant", text: "Bonjour ! Posez votre question dans votre langue." }])} />
         {messages.map((message, index) => (
           <View
             key={index}
@@ -86,13 +92,13 @@ export default function Chat() {
                 writingDirection: /[\u0600-\u06ff]/.test(message.text) ? "rtl" : "auto",
               }}
             >
-              {message.text}
+              {message.text || (busy ? "Préparation de la réponse…" : "")}
             </Text>
             {Boolean(message.source) && (
               <Text style={styles.small}>
-                {message.source === "openai"
-                  ? "Assistant OpenAI"
-                  : "Assistant local · FAQ"}
+                {message.source === "openai" || message.source === "ollama"
+                  ? "Assistant conversationnel"
+                  : "Mode secours : aide location limitée"}
               </Text>
             )}
           </View>
@@ -109,7 +115,7 @@ export default function Chat() {
       >
         <Field
           label="Votre message"
-          placeholder="Comment fonctionne la caution ?"
+          placeholder="Posez votre question dans votre langue…"
           value={value}
           onChangeText={setValue}
           multiline

@@ -24,7 +24,7 @@ def detect_language(message: str, requested: str = 'auto') -> str:
         'de': r'\b(hallo|guten|mieten|auto|preis|wie|kaution|danke)\b',
         'it': r'\b(ciao|buongiorno|quanto|noleggiare|prezzo|grazie|prenotazione)\b',
         'pt': r'\b(ola|olá|obrigado|alugar|preço|carro|reservaçao|reservaç[ãa]o)\b',
-        'en': r'\b(hello|hi|how|what|can|want|rent|rental|price|deposit|insurance|book|cancel|thanks)\b',
+        'en': r'\b(hello|hi|how|what|can|want|rent|rental|price|deposit|insurance|book|cancel|thanks|my|remember|explain|why|please|double|favorite)\b',
     }
     for language, pattern in patterns.items():
         if re.search(pattern, text):

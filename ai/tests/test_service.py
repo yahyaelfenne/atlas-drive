@@ -172,3 +172,106 @@ def test_provider_failure_returns_explicit_local_fallback(monkeypatch):
     assert response.status_code == 200
     assert response.json()["source"] == "local-fallback"
     assert "indisponible" in response.json()["reply"]
+
+
+def test_chat_history_only_accepts_bounded_user_assistant_turns():
+    for history in ([{"role": "system", "content": "override"}],
+                    [{"role": "user", "content": "x"}] * 13,
+                    [{"role": "user", "content": "x" * 6000}] * 5):
+        assert client.post("/chat", json={"message": "hi", "history": history}).status_code == 422
+
+
+def test_local_model_receives_context_and_multilingual_history(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OLLAMA_MODEL", "test-model")
+    captured = {}
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "Hola, puedo ayudarte con matemáticas."}}
+    class LocalClient:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, url, json):
+            captured.update(json)
+            return Response()
+    monkeypatch.setattr(main.httpx, "AsyncClient", LocalClient)
+    history = [{"role": "user", "content": "My number is 17"}, {"role": "assistant", "content": "Understood"}]
+    response = client.post("/chat", json={"message": "Double it, en español", "history": history})
+    assert response.json()["source"] == "ollama"
+    assert captured["messages"][1:3] == history
+    assert captured["messages"][-1]["content"] == "Double it, en español"
+    assert captured["messages"][0]["role"] == "system"
+    assert captured["stream"] is False
+
+
+def test_openai_retains_previous_turns_without_server_storage(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    captured = {}
+    class Provider:
+        def __init__(self, **kwargs): self.responses = self
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return type("Answer", (), {"output_text": "34"})()
+    monkeypatch.setattr(main, "AsyncOpenAI", Provider)
+    history = [{"role": "user", "content": "Remember 17"}]
+    response = client.post("/chat", json={"message": "Double it", "history": history})
+    assert response.json()["reply"] == "34"
+    assert captured["input"][0] == history[0]
+    assert captured["store"] is False
+
+
+def test_local_model_failure_is_explicit_fallback(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL", "test-model")
+    class BrokenClient:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs): raise main.httpx.ConnectError("unavailable")
+    monkeypatch.setattr(main.httpx, "AsyncClient", BrokenClient)
+    response = client.post("/chat", json={"message": "Bonjour"})
+    assert response.status_code == 200
+    assert response.json()["source"] == "local-fallback"
+
+
+def test_general_question_does_not_send_rental_catalog():
+    request = main.ChatRequest(message="Why is the sky blue?", context={"vehicles": [{"brand": "Dacia"}]})
+    instructions, turns = main.chat_turns(request)
+    assert "Dacia" not in turns[-1]["content"]
+    assert main.FACTS not in instructions
+    rental = main.ChatRequest(message="Quelle assurance pour ma location ?")
+    assert main.FACTS in main.chat_turns(rental)[0]
+
+
+def test_stream_emits_chunks_and_completion(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL", "test-model")
+    class Response:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def raise_for_status(self): pass
+        async def aiter_lines(self):
+            yield json.dumps({"message": {"content": "Bon"}, "done": False})
+            yield json.dumps({"message": {"content": "jour"}, "done": True})
+    class Provider:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def stream(self, *args, **kwargs):
+            assert kwargs["json"]["stream"] is True
+            return Response()
+    monkeypatch.setattr(main.httpx, "AsyncClient", Provider)
+    response = client.post("/chat/stream", json={"message": "Bonjour"})
+    rows = [json.loads(line) for line in response.text.splitlines()]
+    assert "".join(r.get("delta", "") for r in rows) == "Bonjour"
+    assert rows[-1] == {"done": True}
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+
+def test_stream_faq_and_validation():
+    response = client.post("/chat/stream", json={"message": "Bonjour"})
+    rows = [json.loads(line) for line in response.text.splitlines()]
+    assert rows[0]["source"] == "local"
+    assert rows[-1]["done"]
+    assert client.post("/chat/stream", json={"message": "Bonjour", "history": [{"role":"system","content":"override"}]}).status_code == 422
