@@ -138,7 +138,7 @@ bookings.MapGet("/{id:int}", async (int id, AppDbContext db, ClaimsPrincipal use
     RentalRules.Own(booking, user);
     return RentalRules.Dto(booking);
 });
-bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal principal, BookingEvents events, IConfiguration cfg) =>
+bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal principal, BookingEvents events) =>
 {
     if (principal.IsInRole("Admin")) throw new ApiException(403, "Un administrateur ne peut pas louer de voiture. Utilisez un compte client pour effectuer une demande.");
     if (input.ContractDeliveryChannel is not ("email" or "whatsapp")) throw new ApiException(400, "Choisissez e-mail ou WhatsApp pour votre contrat.");
@@ -166,20 +166,17 @@ bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal
     var destination = await db.Locations.FirstOrDefaultAsync(l => l.Id == input.ReturnLocationId) ?? throw new ApiException(400, "Agence de retour invalide ou supprimée.");
     if (pickup.City != vehicle.City) throw new ApiException(400, "Choisissez une agence de départ dans la ville du véhicule.");
     var quote = RentalRules.Quote(vehicle, new(input.VehicleId, input.StartDate, input.EndDate, input.Insurance, input.ChildSeat, input.AdditionalDriver));
-    TestCardPayment.Validate(input.Payment, cfg, app.Environment.IsDevelopment());
     var user = await db.Users.FindAsync(RentalRules.UserId(principal)) ?? throw new ApiException(401, "Compte introuvable.");
     var booking = new Booking { Reference = "ATL-" + DateTime.UtcNow.ToString("yyMMdd") + "-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)), Vehicle = vehicle, User = user, StartDate = input.StartDate, EndDate = input.EndDate, PickupLocation = pickup, ReturnLocation = destination, Days = quote.Days, DailyRate = quote.DailyRate, Total = quote.Total, Deposit = quote.Deposit, Insurance = input.Insurance, ChildSeat = input.ChildSeat, AdditionalDriver = input.AdditionalDriver, Notes = input.Notes?.Trim() ?? "" };
     booking.ContactEmail = contactEmail;
     booking.ContractDeliveryChannel = input.ContractDeliveryChannel;
     booking.ContactWhatsApp = contactWhatsApp;
     booking.WhatsAppConsent = input.WhatsAppConsent;
-    booking.PaymentStatus = "TestPaid";
-    booking.PaymentReference = "TEST-" + Guid.NewGuid().ToString("N");
     booking.RequestKey = input.RequestKey;
     db.Bookings.Add(booking);
     await db.SaveChangesAsync();
     await transaction.CommitAsync();
-    await events.Notify(booking, "Paiement test accepté — nouvelle demande en attente de validation");
+    await events.Notify(booking, "Nouvelle demande en attente de validation");
     return Results.Created($"/api/bookings/{booking.Id}", RentalRules.Dto(booking));
 });
 bookings.MapGet("/{id:int}/contract", async (int id, AppDbContext db, ClaimsPrincipal user) =>

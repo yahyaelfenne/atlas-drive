@@ -180,13 +180,13 @@ FACTS = (
     "multiplié par le tarif journalier du véhicule. La date de retour termine la période et n'ajoute pas un jour. "
     "L'option assurance premium coûte 90 MAD/jour, le siège enfant 35 MAD/jour et le conducteur supplémentaire 50 MAD/jour. "
     "La caution est affichée séparément et n'est pas incluse dans le montant de location. "
-    "La demande exige un compte et un paiement carte de test accepté avant sa création. Elle reste Pending, en attente d'acceptation ou de refus par l'admin, et bloque déjà la voiture sur les dates demandées. "
+    "La demande exige un compte client mais aucun paiement en ligne ni saisie de carte. Elle reste Pending, en attente d'acceptation ou de refus par l'admin, et bloque déjà la voiture sur les dates demandées. "
     "Seul l'admin publie des voitures et des agences. Le client ne peut pas confirmer sa propre demande. "
-    "Après acceptation admin, la réservation devient Confirmed et le contrat est accessible dans Mes réservations, sans second paiement. Un refus ou une annulation produit un remboursement simulé. "
+    "Après acceptation admin, la réservation devient Confirmed et le contrat est accessible dans Mes réservations, sans étape de paiement. Un refus ou une annulation libère les dates. "
     "Une demande en attente ou une réservation confirmée peut être annulée avant la prise en charge. "
     "Après la prise en charge, contactez l'agence. Les agences se trouvent à Casablanca, Rabat, Marrakech et Agadir. "
-    "Le paiement carte est une simulation avant l'envoi : nom du titulaire, numéro de carte TEST, expiration et CVC TEST dans le formulaire. Carte acceptée 4242 4242 4242 4242 ; refusée 4000 0000 0000 0002. Aucune vraie carte. Aucun débit réel ni stockage du numéro ou CVC. Les vrais paiements ne sont pas configurés. "
-    "Le paiement a sa page séparée après les dates et options. Le chiffre d’affaires inclut uniquement les locations payées et acceptées par l’admin, hors remboursements. "
+    "Le paiement en ligne et les cartes de test ont été supprimés. Le client envoie directement sa demande après les dates, agences et options. Ne demande jamais de numéro de carte ni de CVC. "
+    "Le chiffre d’affaires encaissé reste basé sur les anciens paiements enregistrés et les locations acceptées. Une nouvelle demande sans paiement n'est pas un encaissement. Les modalités de règlement sont à convenir directement avec l’agence. "
     "Le contrat peut etre transmis par e-mail si le service est configure, ou manuellement sur WhatsApp par l’admin : le client renseigne son numero et son consentement. L’admin ouvre le message et joint le contrat PDF, puis confirme l’envoi dans WhatsApp. Aucun envoi automatique WhatsApp n’est actuellement active. "
     "Les disponibilités et prix définitifs viennent du formulaire de réservation. "
     "Les adresses des agences sont des données de démonstration à vérifier avant un déplacement réel."
@@ -210,11 +210,11 @@ def local_faq(message: str) -> str:
     if any(term in question for term in ("contrat", "facture", "imprim", "pdf", "contract")):
         return "Le contrat est disponible dans Mes réservations après acceptation par l'admin. Sur téléphone, partagez le PDF ; sur le site, ouvrez le contrat puis imprimez-le ou enregistrez-le. Le prix, la caution, les dates et les agences y figurent."
     if any(term in question for term in ("pai", "carte bancaire", "payment")):
-        return "Avant d'envoyer votre demande, remplissez le titulaire, le numéro de carte test, l'expiration future et le CVC test sur la page de paiement, après le choix des dates et options. La carte 4242 4242 4242 4242 est acceptée et 4000 0000 0000 0002 refusée. Aucun débit réel. Une carte refusée ne crée aucune demande. N'utilisez jamais une vraie carte."
+        return "Il n’y a plus de paiement en ligne ni de carte à saisir. Envoyez directement votre demande après avoir choisi la voiture, les dates, les agences et les options. L’admin doit ensuite l’accepter. Pour les modalités de règlement, contactez l’agence."
     if any(term in question for term in ("dispon", "date", "available", "recommend", "recommand", "conseil", "voiture")):
         return "Indiquez votre ville et vos dates dans la recherche pour afficher les véhicules disponibles. Le conseiller de véhicules peut aussi classer la flotte selon votre budget et le nombre de passagers. Le devis et la disponibilité sont revérifiés à la confirmation."
     if any(term in question for term in ("reserv", "book", "compte", "connect")):
-        return "Choisissez une voiture, vos dates, les agences et options, vérifiez le devis et payez en mode test avant d'envoyer votre demande. Elle bloque la voiture sur vos dates et reste en attente jusqu'à acceptation ou refus par l'admin. Après acceptation, le contrat devient disponible, sans nouveau paiement dans Mes réservations. Seul l'admin peut publier des voitures et agences."
+        return "Choisissez une voiture, vos dates, les agences et options, vérifiez le devis et envoyez directement votre demande, sans paiement en ligne. Elle bloque la voiture sur vos dates et reste en attente jusqu'à acceptation ou refus par l'admin. Après acceptation, le contrat devient disponible, dans Mes réservations. Seul l'admin peut publier des voitures et agences."
     return "Je suis l'assistant local de Location Ennour. Je peux expliquer les prix, la caution, les options, la réservation, l'annulation et les contrats. Pour un prix exact, choisissez une voiture et vos dates ; pour une condition spécifique, contactez l'agence."
 
 

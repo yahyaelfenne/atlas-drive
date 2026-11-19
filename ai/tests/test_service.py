@@ -9,6 +9,16 @@ import main
 client = TestClient(main.app)
 
 
+def test_reservation_guidance_no_longer_requests_card_payment():
+    reply = main.local_faq("Comment réserver ?")
+    assert "sans paiement en ligne" in reply
+    assert "4242" not in main.FACTS
+    assert "aucun paiement en ligne" in main.FACTS
+    payment_reply = main.local_faq("Comment fonctionne le paiement ?")
+    assert "plus de paiement en ligne" in payment_reply
+    assert "CVC" not in payment_reply
+
+
 def vehicle(vehicle_id, rate=300, seats=5, category="SUV", status="Available", rating=4.8):
     return {
         "id": vehicle_id,

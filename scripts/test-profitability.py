@@ -61,16 +61,26 @@ def main():
         agencies=req('GET','/api/locations')
         agency=next(a for a in agencies if a['city']==template['city'])
         today=dt.date.today(); start=today+dt.timedelta(days=45)
-        booking=req('POST','/api/bookings',201,user,json={'vehicleId':vid,'startDate':start.isoformat(),'endDate':(start+dt.timedelta(days=3)).isoformat(),'pickupLocationId':agency['id'],'returnLocationId':agency['id'],'contactEmail':'finance-qa@example.test','insurance':'basic','requestKey':str(uuid.uuid4()),'payment':{'cardholder':'QA Test Only','number':'4242424242424242','expiry':f'12/{(today.year+2)%100:02d}','cvc':'123'}})
+        body={'vehicleId':vid,'startDate':start.isoformat(),'endDate':(start+dt.timedelta(days=3)).isoformat(),'pickupLocationId':agency['id'],'returnLocationId':agency['id'],'contactEmail':'finance-qa@example.test','insurance':'basic','requestKey':str(uuid.uuid4()),'status':'Confirmed','paymentStatus':'Paid','total':1}
+        req('GET','/api/payments/config',404)
+        req('POST','/api/bookings',403,admin,json=body)
+        booking=req('POST','/api/bookings',201,user,json=body)
         booking_id=booking['id']
+        assert booking['status']=='Pending' and booking['paymentStatus']=='Unpaid' and booking['total']==1500, 'the server creates an unpaid pending request without trusting client totals or status'
+        assert req('POST','/api/bookings',token=user,json=body)['id']==booking_id, 'retry must not create a duplicate'
+        req('POST','/api/bookings',409,user,json={**body,'requestKey':str(uuid.uuid4())})
+        req('POST',f'/api/bookings/{booking_id}/test-payment',404,user,json={})
+        req('GET',f'/api/bookings/{booking_id}/contract',409,user)
         def paid_row(include):
             return next(r for r in req('GET',f'/api/admin/profitability?month={current}&includeTest={str(include).lower()}',token=admin)['rows'] if r['vehicleId']==vid)
-        assert paid_row(True)['revenue']==0, 'a prepaid pending request is not revenue'
+        assert paid_row(True)['revenue']==0, 'a pending request is not revenue'
         req('POST',f'/api/admin/bookings/{booking_id}/review',token=admin,json={'approve':True})
-        assert paid_row(True)['revenue']==booking['total'], 'approval immediately recognizes test payment once'
-        assert paid_row(False)['revenue']==0, 'real-only mode excludes test payment'
+        approved=req('GET',f'/api/bookings/{booking_id}',token=admin)
+        assert approved['status']=='Confirmed' and approved['paymentStatus']=='Unpaid'
+        assert paid_row(True)['revenue']==0, 'approval without payment must not invent revenue'
+        assert paid_row(False)['revenue']==0, 'real-only mode excludes unpaid bookings'
         req('POST',f'/api/bookings/{booking_id}/cancel',token=user)
-        assert paid_row(True)['revenue']==0, 'refunded booking removes its revenue'
+        assert paid_row(True)['revenue']==0, 'cancelled unpaid booking has no revenue'
         booking_id=None
         req('DELETE',f'/api/admin/vehicles/{vid}',204,admin)
         assert row()['archived'], 'archiving does not erase financing obligations'

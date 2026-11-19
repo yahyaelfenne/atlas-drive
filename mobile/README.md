@@ -27,7 +27,7 @@ Le fichier `.env.local`, ignoré par Git, peut définir `EXPO_PUBLIC_API_URL`. L
 
 - Accueil, catalogue, recherche, villes, catégories, transmission, budget et disponibilité par dates.
 - Fiche voiture, dates natives, agences, protection et options, devis calculé par le serveur.
-- Connexion et inscription ; saisie de carte TEST et paiement simulé avant l’envoi de la demande ; blocage immédiat des dates ; validation admin ; annulation avec remboursement simulé et contrat PDF après acceptation. Cartes de test : 4242 4242 4242 4242 acceptée ou 4000 0000 0000 0002 refusée, expiration future MM/AA et CVC 123. Ne jamais utiliser de vraie carte. Aucun numéro ou CVC enregistré.
+- Connexion et inscription ; demande directe sans carte ni paiement en ligne ; blocage des dates ; validation admin ; annulation et contrat PDF après acceptation.
 - Agences et ouverture d’OpenStreetMap.
 - Recommandations scikit-learn et assistant, avec indication de sa source locale ou OpenAI.
 - Admin : Locations pour accepter/refuser les demandes clients et suivre les départs/retours ; Voitures pour ajouter/modifier/supprimer ; Agences pour ajouter/modifier/supprimer les bureaux et leurs coordonnées GPS. Le compte admin ne peut ni louer ni payer une location.
@@ -68,6 +68,5 @@ npx eas-cli@latest build --platform ios --profile production
 La compilation cloud nécessite votre compte Expo. La signature et la distribution iPhone nécessitent vos identifiants Apple Developer. Sur ce PC Windows, aucun simulateur iOS ou SDK Android n’est installé. Les exports JavaScript Android/iOS et l’aperçu navigateur peuvent être vérifiés ici. Les binaires APK/IPA et les essais sur appareils physiques nécessitent l’environnement de compilation et les appareils correspondants.
 
 Références officielles — [Expo Go](https://expo.dev/go), [environnement de développement](https://docs.expo.dev/get-started/set-up-your-environment/), [compilation des applications](https://docs.expo.dev/build/setup/).
-
 
 Le catalogue contient 14 modèles et des photographies réelles illustratives provenant de Wikimedia Commons. Les crédits sont accessibles depuis Mon compte. Le chatbot détecte la langue et propose un choix explicite : français, darija, arabe, anglais, espagnol, allemand, italien et portugais en mode local. Les questions generales, le contexte de conversation et les autres langues sont pris en charge par le modele OpenAI ou Ollama configure sur le serveur. Le mode Auto suit la langue du message. Aucune clé ne doit être placée dans l’application mobile.

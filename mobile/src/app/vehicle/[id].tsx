@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -14,6 +14,7 @@ import {
   day,
   money,
   type Agency,
+  type Booking,
   type Quote,
   type Vehicle,
 } from "../../lib/types";
@@ -29,7 +30,6 @@ import {
 } from "../../components/ui";
 import { DateField } from "../../components/DateField";
 import { randomUUID } from "expo-crypto";
-import { setCheckout } from "../../lib/checkout";
 export default function VehicleDetail() {
   const { id, startDate, endDate } = useLocalSearchParams<{
     id: string;
@@ -46,7 +46,9 @@ export default function VehicleDetail() {
   const [additionalDriver, setAdditionalDriver] = useState(false);
   const [pickup, setPickup] = useState("");
   const [destination, setDestination] = useState("");
-  const [contractDeliveryChannel, setContractDeliveryChannel] = useState<"email" | "whatsapp">("whatsapp");
+  const [contractDeliveryChannel, setContractDeliveryChannel] = useState<
+    "email" | "whatsapp"
+  >("whatsapp");
   const [contactWhatsApp, setContactWhatsApp] = useState("+212");
   const [whatsAppConsent, setWhatsAppConsent] = useState(false);
   const [contactEmail, setContactEmail] = useState(user?.email || "");
@@ -55,6 +57,10 @@ export default function VehicleDetail() {
   const [quote, setQuote] = useState<{ key: string; price: Quote } | null>(
     null,
   );
+  const lock = useRef(false);
+  const [requestKey] = useState(randomUUID);
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState<Booking | null>(null);
   const [error, setError] = useState("");
   const [quoteError, setQuoteError] = useState("");
   useEffect(() => {
@@ -118,20 +124,77 @@ export default function VehicleDetail() {
       router.push("/auth");
       return;
     }
-    if (!vehicle || !quote || quote.key !== quoteKey || !agreed || !pickup || !destination) return;
-    if (contractDeliveryChannel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
-      setError("Indiquez une adresse e-mail valide pour recevoir votre contrat."); return;
+    if (
+      !vehicle ||
+      !quote ||
+      quote.key !== quoteKey ||
+      !agreed ||
+      !pickup ||
+      !destination
+    )
+      return;
+    if (
+      contractDeliveryChannel === "email" &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())
+    ) {
+      setError(
+        "Indiquez une adresse e-mail valide pour recevoir votre contrat.",
+      );
+      return;
     }
-    if (contractDeliveryChannel === "whatsapp" && (!/^\+[1-9]\d{7,14}$/.test(contactWhatsApp.replace(/[\s().-]/g, "")) || !whatsAppConsent)) {
-      setError("Indiquez votre numéro avec l’indicatif (+212…) et autorisez l’envoi sur WhatsApp."); return;
+    if (
+      contractDeliveryChannel === "whatsapp" &&
+      (!/^\+[1-9]\d{7,14}$/.test(contactWhatsApp.replace(/[\s().-]/g, "")) ||
+        !whatsAppConsent)
+    ) {
+      setError(
+        "Indiquez votre numéro avec l’indicatif (+212…) et autorisez l’envoi sur WhatsApp.",
+      );
+      return;
     }
-    setCheckout({ userId: String(user.id), vehicleName: `${vehicle.brand} ${vehicle.model}`,
-      quote: quote.price, pickupName: agencies.find(a => a.id === Number(pickup))?.name || "",
-      returnName: agencies.find(a => a.id === Number(destination))?.name || "",
-      input: { ...quoteInput, pickupLocationId: Number(pickup), returnLocationId: Number(destination), notes, contactEmail: contractDeliveryChannel === "email" ? contactEmail.trim() : "", contractDeliveryChannel, contactWhatsApp, whatsAppConsent, requestKey: randomUUID() } });
-    router.push("/payment");
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const booking = await api<Booking>("/api/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          ...quoteInput,
+          pickupLocationId: Number(pickup),
+          returnLocationId: Number(destination),
+          notes,
+          contactEmail:
+            contractDeliveryChannel === "email" ? contactEmail.trim() : "",
+          contractDeliveryChannel,
+          contactWhatsApp,
+          whatsAppConsent,
+          requestKey,
+        }),
+      });
+      setSuccess(booking);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
 
+  if (success)
+    return (
+      <View style={styles.content}>
+        <Text style={styles.title}>Demande envoyée</Text>
+        <Text style={styles.body}>
+          Votre demande {success.reference} est en attente de validation par
+          l’admin. Le contrat sera disponible après acceptation.
+        </Text>
+        <Button
+          title="Voir mes réservations"
+          onPress={() => router.replace("/bookings")}
+        />
+      </View>
+    );
   if (user?.role === "Admin")
     return (
       <View style={styles.content}>
@@ -250,12 +313,53 @@ export default function VehicleDetail() {
               />
             </View>
             <Text style={styles.label}>Recevoir mon contrat par</Text>
-            <Chips value={contractDeliveryChannel} onChange={v => setContractDeliveryChannel(v as "email" | "whatsapp")} options={[{label:"WhatsApp",value:"whatsapp"},{label:"E-mail",value:"email"}]} />
-            {contractDeliveryChannel === "whatsapp" ? <>
-              <Field label="Numéro WhatsApp" value={contactWhatsApp} onChangeText={setContactWhatsApp} keyboardType="phone-pad" maxLength={24} placeholder="+212612345678" />
-              <View style={styles.row}><Switch accessibilityLabel="J’accepte de recevoir mon contrat sur WhatsApp" value={whatsAppConsent} onValueChange={setWhatsAppConsent} /><Text style={[styles.small,{flex:1}]}>J’accepte de recevoir mon contrat et les informations de cette réservation sur WhatsApp à ce numéro.</Text></View>
-              <Text style={styles.small}>Après acceptation admin, l’agence pourra vous transmettre votre contrat sur WhatsApp. Vérifiez votre numéro.</Text>
-            </> : <Field label="E-mail pour recevoir le contrat" value={contactEmail} onChangeText={setContactEmail} keyboardType="email-address" autoCapitalize="none" maxLength={254} placeholder="vous@exemple.com" />}
+            <Chips
+              value={contractDeliveryChannel}
+              onChange={(v) =>
+                setContractDeliveryChannel(v as "email" | "whatsapp")
+              }
+              options={[
+                { label: "WhatsApp", value: "whatsapp" },
+                { label: "E-mail", value: "email" },
+              ]}
+            />
+            {contractDeliveryChannel === "whatsapp" ? (
+              <>
+                <Field
+                  label="Numéro WhatsApp"
+                  value={contactWhatsApp}
+                  onChangeText={setContactWhatsApp}
+                  keyboardType="phone-pad"
+                  maxLength={24}
+                  placeholder="+212612345678"
+                />
+                <View style={styles.row}>
+                  <Switch
+                    accessibilityLabel="J’accepte de recevoir mon contrat sur WhatsApp"
+                    value={whatsAppConsent}
+                    onValueChange={setWhatsAppConsent}
+                  />
+                  <Text style={[styles.small, { flex: 1 }]}>
+                    J’accepte de recevoir mon contrat et les informations de
+                    cette réservation sur WhatsApp à ce numéro.
+                  </Text>
+                </View>
+                <Text style={styles.small}>
+                  Après acceptation admin, l’agence pourra vous transmettre
+                  votre contrat sur WhatsApp. Vérifiez votre numéro.
+                </Text>
+              </>
+            ) : (
+              <Field
+                label="E-mail pour recevoir le contrat"
+                value={contactEmail}
+                onChangeText={setContactEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                maxLength={254}
+                placeholder="vous@exemple.com"
+              />
+            )}
             <Field
               label="Une précision ?"
               value={notes}
@@ -304,19 +408,16 @@ export default function VehicleDetail() {
           </View>
           <ErrorMessage message={error} />
           <Button
-            title={
-              user
-                ? "Continuer vers le paiement"
-                : "Me connecter pour réserver"
-            }
+            title={user ? "Envoyer ma demande" : "Me connecter pour réserver"}
             disabled={
               !price || !pickup || !destination || (Boolean(user) && !agreed)
             }
+            busy={busy}
             onPress={reserve}
           />
           <Text style={[styles.small, { textAlign: "center" }]}>
-            Paiement simulé avant la demande. En cas de refus admin,
-            remboursement simulé. Aucun débit réel.
+            Votre demande sera examinée par l’admin. Le contrat sera disponible
+            après son acceptation.
           </Text>
           <DemoNote />
         </View>

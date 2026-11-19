@@ -33,7 +33,7 @@ public static class Workflow
                 booking.ContractEmailNextAttemptAt = DateTime.UtcNow;
             }
             await db.SaveChangesAsync(); await tx.CommitAsync();
-            await events.Notify(booking, input.Approve ? "Réservation acceptée" : "Demande refusée — remboursement test si applicable");
+            await events.Notify(booking, input.Approve ? "Réservation acceptée" : "Demande refusée");
             return RentalRules.Dto(booking);
         });
 
@@ -79,8 +79,6 @@ public static class Workflow
             return Results.NoContent();
         });
 
-        app.MapGet("/api/payments/config", (IConfiguration cfg) => new { mode = cfg.GetValue("Payments:TestEnabled", true) && app.Environment.IsDevelopment() ? "test" : "unavailable", currency = "MAD" });
-        app.MapPost("/api/bookings/{id:int}/test-payment", () => Results.Json(new { message = "Le paiement doit maintenant être effectué dans le formulaire avant l’envoi de la demande." }, statusCode: 410)).RequireAuthorization();
     }
 
     static void ValidateLocation(Location input)

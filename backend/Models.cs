@@ -123,8 +123,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 public record RegisterInput(string FullName, string Email, string Password, string? Phone);
 public record LoginInput(string Email, string Password);
 public record QuoteInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false);
-public record BookingInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, int PickupLocationId, int ReturnLocationId, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false, string? Notes = null, TestCardInput? Payment = null, Guid? RequestKey = null, string? ContactEmail = null, string ContractDeliveryChannel = "email", string? ContactWhatsApp = null, bool WhatsAppConsent = false);
-public record TestCardInput(string Cardholder, string Number, string Expiry, string Cvc);
+public record BookingInput(int VehicleId, DateOnly StartDate, DateOnly EndDate, int PickupLocationId, int ReturnLocationId, string Insurance = "basic", bool ChildSeat = false, bool AdditionalDriver = false, string? Notes = null, Guid? RequestKey = null, string? ContactEmail = null, string ContractDeliveryChannel = "email", string? ContactWhatsApp = null, bool WhatsAppConsent = false);
 public record CheckoutInput(int Odometer);
 public record ReturnInput(int Odometer, string? Notes, decimal DamageFee);
 public record ChatTurn(string Role, string Content);

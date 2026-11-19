@@ -1,14 +1,8 @@
 # Location Ennour
 
-Le client choisit des dates disponibles, saisit une carte **de test**, puis clique sur **Payer en test et envoyer la demande**. Le serveur vérifie la disponibilité et le montant, valide le paiement simulé, puis crée la demande **En attente**. Une demande payée bloque déjà la voiture sur ces dates : deux demandes concurrentes ne peuvent pas réserver le même véhicule. L’administrateur accepte ou refuse ensuite dans **Locations** ; le contrat devient accessible après acceptation, sans nouveau paiement. Les anciennes réservations conservent leur statut.
+Le client choisit une voiture, les dates, les agences et les options, puis clique sur **Envoyer ma demande**. Aucun paiement en ligne ni saisie de carte n’est demandé. Le serveur vérifie la disponibilité et calcule le montant, puis crée une demande **En attente**. La demande bloque les dates : deux demandes concurrentes ne peuvent pas réserver la même voiture. L’administrateur accepte ou refuse dans **Locations** ; le contrat devient disponible après acceptation.
 
-Le paiement est un **simulateur local** : nom du titulaire de test, numéro `4242 4242 4242 4242` (accepté) ou `4000 0000 0000 0002` (refusé), expiration future au format MM/AA et CVC `123`. N’utilisez aucune carte réelle. Aucun numéro, titulaire, expiration ou CVC n’est conservé ; seuls le statut et la référence de simulation sont enregistrés. Un paiement refusé ne crée aucune demande. Un paiement accepté produit `TestPaid` ; un refus admin ou une annulation produit `TestRefunded` et libère les dates. Les répétitions d’une même requête sont idempotentes. Le simulateur est limité à Development et peut être désactivé par `Payments__TestEnabled=false`. Aucun encaissement réel n’est configuré.
-
-**L’admin ne peut pas louer ni payer une location**, y compris par appel direct à l’API. Ses onglets sont dédiés à la gestion : **Locations** pour les demandes clients et les départs/retours, **Voitures** pour ajouter, modifier ou supprimer un véhicule, et **Agences** pour ajouter, modifier ou supprimer un bureau et ses coordonnées GPS. Les suppressions retirent les éléments du catalogue tout en conservant l’historique ; un bureau lié à une demande ou une location en cours ne peut pas être supprimé. Les comptes clients gardent le catalogue, la réservation et leurs locations personnelles.
-
-La version Android et iPhone se trouve dans `mobile/`. Depuis VS Code, lancez la tâche **Location Ennour: application mobile**, puis scannez le QR code dans Expo Go. Les instructions de connexion au PC et de compilation sont dans [mobile/README.md](mobile/README.md).
-
-Application locale de location de voitures au Maroc, avec interface française et prix en MAD. Le projet est ouvert dans VS Code via `atlas-drive.code-workspace`.
+Les anciens paiements restent dans l’historique. Une nouvelle réservation est `Unpaid` : son acceptation ne simule pas d’encaissement et ne gonfle pas le chiffre d’affaires encaissé. La caution reste séparée du montant de location. Les répétitions avec le même identifiant de demande sont idempotentes.
 
 ## Demarrer sur ce PC
 
@@ -30,19 +24,19 @@ Le premier lancement necessite .NET SDK 10, Node.js 24, Python 3.13 et PostgreSQ
 
 Dans VS Code : **Terminal > Run Task > Location Ennour: demarrer**. Les taches d'installation, de verification et d'arret sont aussi fournies.
 
-| Service | Adresse |
-| --- | --- |
-| Site React | http://127.0.0.1:5273 |
-| API / Swagger | http://127.0.0.1:5180/swagger |
-| FastAPI / documentation | http://127.0.0.1:8101/docs |
-| PostgreSQL | 127.0.0.1:5433, base `atlas_drive`, utilisateur `atlas` |
+| Service                 | Adresse                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| Site React              | http://127.0.0.1:5273                                   |
+| API / Swagger           | http://127.0.0.1:5180/swagger                           |
+| FastAPI / documentation | http://127.0.0.1:8101/docs                              |
+| PostgreSQL              | 127.0.0.1:5433, base `atlas_drive`, utilisateur `atlas` |
 
 Comptes de demonstration, crees uniquement en environnement `Development` :
 
-| Role | Email | Mot de passe |
-| --- | --- | --- |
-| Administrateur | admin@atlasdrive.ma | AtlasAdmin2026! |
-| Client | client@atlasdrive.ma | AtlasClient2026! |
+| Role           | Email                | Mot de passe     |
+| -------------- | -------------------- | ---------------- |
+| Administrateur | admin@atlasdrive.ma  | AtlasAdmin2026!  |
+| Client         | client@atlasdrive.ma | AtlasClient2026! |
 
 Les vehicules, agences et reservations initiales sont des donnees de demonstration. Les photos sont illustratives. Aucun paiement en ligne n'est effectue. La caution est affichee separement du montant de location.
 
@@ -138,17 +132,17 @@ Le site Compose est servi sur http://127.0.0.1:8088. Pour un hebergement public,
 - [VS Code : taches](https://code.visualstudio.com/docs/debugtest/tasks)
 - [OpenAI : Responses API](https://platform.openai.com/docs/api-reference/responses)
 
-Le paiement se fait sur une page distincte, après le choix des dates, agences et options. Le chiffre d’affaires inclut les locations payées et acceptées par l’admin (Confirmed, Active, Completed), une seule fois ; les demandes Pending et paiements remboursés sont exclus. Les frais de dommages sans paiement enregistré ne sont pas inclus.
+Le parcours de réservation ne comporte plus de page de paiement. Le chiffre d’affaires inclut les locations payées et acceptées par l’admin (Confirmed, Active, Completed), une seule fois ; les demandes Pending et paiements remboursés sont exclus. Les frais de dommages sans paiement enregistré ne sont pas inclus.
 
 Le chatbot conversationnel peut traiter les questions generales et les traductions, et utiliser le contexte des derniers messages dans la langue demandee. Il fonctionne avec OpenAI ou avec un modele Ollama installe sur le PC. En mode local, le PC doit rester allume et les reponses peuvent prendre plus de temps. La FAQ de secours est identifiee clairement si le modele est indisponible. Voir ai/README.md pour la configuration.
 
 ## Contrats par e-mail
 
-L’adresse de reception du contrat est obligatoire dans la reservation, modifiable avant le paiement, distincte du compte utilisateur. Apres acceptation admin, un instantane du contrat est mis en file dans la meme transaction. Un service de fond envoie le recapitulatif et la piece jointe HTML imprimable en PDF. La file est conservee apres redemarrage ; aucun contrat n’est envoye pour une demande Pending ou refusee. Les reservations annulees avant envoi sont ignorees. Le statut figure dans les espaces client et admin ; Sent signifie accepte par le serveur mail, pas une preuve de lecture ou de remise en boite de reception.
+L’adresse de reception du contrat est obligatoire dans la reservation, modifiable avant l’envoi de la demande, distincte du compte utilisateur. Apres acceptation admin, un instantane du contrat est mis en file dans la meme transaction. Un service de fond envoie le recapitulatif et la piece jointe HTML imprimable en PDF. La file est conservee apres redemarrage ; aucun contrat n’est envoye pour une demande Pending ou refusee. Les reservations annulees avant envoi sont ignorees. Le statut figure dans les espaces client et admin ; Sent signifie accepte par le serveur mail, pas une preuve de lecture ou de remise en boite de reception.
 
 Pour Gmail, activer la validation en deux etapes et creer un mot de passe d’application dans https://myaccount.google.com/apppasswords. Depuis la racine du projet, executer `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup-Gmail.ps1`. Le script demande l’adresse d’expedition et le mot de passe d’application en saisie masquee, puis active la configuration. Ne pas utiliser le mot de passe habituel du compte. Les identifiants sont chiffres avec Windows DPAPI dans `.local/gmail-credential.xml` (ignore par Git), utilisables uniquement avec ce compte Windows sur ce PC. Les exports Docker/cloud necessitent leurs propres secrets SMTP.
 
-Sans configuration, la file indique WaitingConfiguration. Les erreurs d’envoi sont retentees jusqu’a cinq fois, puis signalees Failed ; l’admin peut relancer via son espace. Une interruption apres acceptation SMTP et avant l’enregistrement du succes peut exceptionnellement produire un doublon a la reprise. En developpement seulement, Smtp__PickupDirectory permet une capture locale .eml sans envoi Internet. Ce mode doit etre absent pour un envoi Gmail reel. Tests locaux : destinataire de reservation, contrat complet, e-mail invalide avant paiement, controle des droits et absence de doublon lors d’une relance d’un envoi deja reussi.
+Sans configuration, la file indique WaitingConfiguration. Les erreurs d’envoi sont retentees jusqu’a cinq fois, puis signalees Failed ; l’admin peut relancer via son espace. Une interruption apres acceptation SMTP et avant l’enregistrement du succes peut exceptionnellement produire un doublon a la reprise. En developpement seulement, Smtp\_\_PickupDirectory permet une capture locale .eml sans envoi Internet. Ce mode doit etre absent pour un envoi Gmail reel. Tests locaux : destinataire de reservation, contrat complet, e-mail invalide avant réservation, controle des droits et absence de doublon lors d’une relance d’un envoi deja reussi.
 
 ## WhatsApp et n8n
 

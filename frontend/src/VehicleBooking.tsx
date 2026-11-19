@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ArrowRight,
@@ -12,12 +12,11 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import type { Location, Quote, User, Vehicle } from "./lib";
+import type { Booking, Location, Quote, User, Vehicle } from "./lib";
 import { day, money, post } from "./lib";
 import { Modal } from "./components/ui/dialog";
 import { Button } from "./components/ui/button";
 import { Input, Select } from "./components/ui/input";
-import type { CheckoutDraft } from "./PaymentPage";
 export function VehicleBooking({
   vehicle: v,
   open,
@@ -27,8 +26,7 @@ export function VehicleBooking({
   locations,
   startDate: initialStart,
   endDate: initialEnd,
-  onContinue,
-  initialDraft,
+  onReserved,
 }: {
   vehicle: Vehicle;
   open: boolean;
@@ -38,35 +36,37 @@ export function VehicleBooking({
   locations: Location[];
   startDate: string;
   endDate: string;
-  onContinue: (draft: CheckoutDraft) => void;
-  initialDraft?: CheckoutDraft | null;
+  onReserved: (booking: Booking) => void;
 }) {
-  const [startDate, setStartDate] = useState(initialDraft?.input.startDate || initialStart),
-    [endDate, setEndDate] = useState(initialDraft?.input.endDate || initialEnd),
+  const [startDate, setStartDate] = useState(initialStart),
+    [endDate, setEndDate] = useState(initialEnd),
     [pickup, setPickup] = useState(
       String(
-        initialDraft?.input.pickupLocationId || locations.find((l) => l.city === v.city)?.id || locations[0]?.id || "",
+        locations.find((l) => l.city === v.city)?.id || locations[0]?.id || "",
       ),
     ),
     [returnLocation, setReturn] = useState(
       String(
-        initialDraft?.input.returnLocationId || locations.find((l) => l.city === v.city)?.id || locations[0]?.id || "",
+        locations.find((l) => l.city === v.city)?.id || locations[0]?.id || "",
       ),
     ),
-    [insurance, setInsurance] = useState(initialDraft?.input.insurance || "basic"),
-    [childSeat, setChildSeat] = useState(initialDraft?.input.childSeat || false),
-    [additionalDriver, setAdditionalDriver] = useState(initialDraft?.input.additionalDriver || false),
-    [notes, setNotes] = useState(initialDraft?.input.notes || ""),
+    [insurance, setInsurance] = useState("basic"),
+    [childSeat, setChildSeat] = useState(false),
+    [additionalDriver, setAdditionalDriver] = useState(false),
+    [notes, setNotes] = useState(""),
     [quote, setQuote] = useState<Quote | null>(null),
     [quoting, setQuoting] = useState(false),
     [error, setError] = useState(""),
     [quoteError, setQuoteError] = useState(""),
-    [busy] = useState(false),
+    [busy, setBusy] = useState(false),
     [accepted, setAccepted] = useState(false);
-  const [contractDeliveryChannel, setContractDeliveryChannel] = useState<"email" | "whatsapp">(initialDraft?.input.contractDeliveryChannel || "whatsapp");
-  const [contactWhatsApp, setContactWhatsApp] = useState(initialDraft?.input.contactWhatsApp || "+212");
-  const [whatsAppConsent, setWhatsAppConsent] = useState(initialDraft?.input.whatsAppConsent || false);
-  const [contactEmail, setContactEmail] = useState(initialDraft?.input.contactEmail || user?.email || "");
+  const [contractDeliveryChannel, setContractDeliveryChannel] = useState<
+    "email" | "whatsapp"
+  >("whatsapp");
+  const [contactWhatsApp, setContactWhatsApp] = useState("+212");
+  const [whatsAppConsent, setWhatsAppConsent] = useState(false);
+  const [contactEmail, setContactEmail] = useState(user?.email || "");
+  const lock = useRef(false);
   const [requestKey] = useState(() => crypto.randomUUID());
   useEffect(() => {
     let cancelled = false;
@@ -111,15 +111,45 @@ export function VehicleBooking({
     }
     if (busy) return;
     if (!quote || !accepted) return;
-    if (contractDeliveryChannel === "whatsapp" && (!/^\+[1-9]\d{7,14}$/.test(contactWhatsApp.replace(/[\s().-]/g, "")) || !whatsAppConsent)) {
-      setError("Indiquez le numéro avec l’indicatif (+212…) et autorisez l’envoi sur WhatsApp."); return;
+    if (
+      contractDeliveryChannel === "whatsapp" &&
+      (!/^\+[1-9]\d{7,14}$/.test(contactWhatsApp.replace(/[\s().-]/g, "")) ||
+        !whatsAppConsent)
+    ) {
+      setError(
+        "Indiquez le numéro avec l’indicatif (+212…) et autorisez l’envoi sur WhatsApp.",
+      );
+      return;
     }
-    onContinue({ vehicle: v, quote, input: {
-      vehicleId: v.id, startDate, endDate, pickupLocationId: Number(pickup),
-      returnLocationId: Number(returnLocation), insurance, childSeat, additionalDriver,
-      notes, requestKey, contactEmail: contractDeliveryChannel === "email" ? contactEmail.trim() : "", contractDeliveryChannel, contactWhatsApp, whatsAppConsent,
-    }, pickupName: locations.find(l => l.id === Number(pickup))?.name || "",
-    returnName: locations.find(l => l.id === Number(returnLocation))?.name || "" });
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const booking = await post<Booking>("/api/bookings", {
+        vehicleId: v.id,
+        startDate,
+        endDate,
+        pickupLocationId: Number(pickup),
+        returnLocationId: Number(returnLocation),
+        insurance,
+        childSeat,
+        additionalDriver,
+        notes,
+        requestKey,
+        contactEmail:
+          contractDeliveryChannel === "email" ? contactEmail.trim() : "",
+        contractDeliveryChannel,
+        contactWhatsApp,
+        whatsAppConsent,
+      });
+      onReserved(booking);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
 
   if (user?.role === "Admin")
@@ -336,14 +366,65 @@ export function VehicleBooking({
               <small>50 MAD / jour</small>
             </label>
           </div>
-          <label>Recevoir mon contrat par
-            <Select value={contractDeliveryChannel} onChange={e => setContractDeliveryChannel(e.target.value as "email" | "whatsapp")}><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option></Select>
+          <label>
+            Recevoir mon contrat par
+            <Select
+              value={contractDeliveryChannel}
+              onChange={(e) =>
+                setContractDeliveryChannel(
+                  e.target.value as "email" | "whatsapp",
+                )
+              }
+            >
+              <option value="whatsapp">WhatsApp</option>
+              <option value="email">E-mail</option>
+            </Select>
           </label>
-          {contractDeliveryChannel === "whatsapp" ? <>
-            <label>Numéro WhatsApp<Input type="tel" required maxLength={24} value={contactWhatsApp} onChange={e => setContactWhatsApp(e.target.value)} placeholder="+212612345678" autoComplete="tel" /></label>
-            <label className="accept-terms"><input type="checkbox" required checked={whatsAppConsent} onChange={e => setWhatsAppConsent(e.target.checked)} /><span>J’accepte de recevoir mon contrat et les informations de cette réservation sur WhatsApp à ce numéro.</span></label>
-            <small>Après acceptation admin, l’agence pourra vous transmettre votre contrat sur WhatsApp. Vérifiez soigneusement le numéro indiqué.</small>
-          </> : <label>E-mail pour recevoir le contrat<Input type="email" required maxLength={254} value={contactEmail} onChange={e => setContactEmail(e.target.value)} autoComplete="email" placeholder="vous@exemple.com" /></label>}
+          {contractDeliveryChannel === "whatsapp" ? (
+            <>
+              <label>
+                Numéro WhatsApp
+                <Input
+                  type="tel"
+                  required
+                  maxLength={24}
+                  value={contactWhatsApp}
+                  onChange={(e) => setContactWhatsApp(e.target.value)}
+                  placeholder="+212612345678"
+                  autoComplete="tel"
+                />
+              </label>
+              <label className="accept-terms">
+                <input
+                  type="checkbox"
+                  required
+                  checked={whatsAppConsent}
+                  onChange={(e) => setWhatsAppConsent(e.target.checked)}
+                />
+                <span>
+                  J’accepte de recevoir mon contrat et les informations de cette
+                  réservation sur WhatsApp à ce numéro.
+                </span>
+              </label>
+              <small>
+                Après acceptation admin, l’agence pourra vous transmettre votre
+                contrat sur WhatsApp. Vérifiez soigneusement le numéro indiqué.
+              </small>
+            </>
+          ) : (
+            <label>
+              E-mail pour recevoir le contrat
+              <Input
+                type="email"
+                required
+                maxLength={254}
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="vous@exemple.com"
+              />
+            </label>
+          )}
           <label>
             Une précision ? <span className="muted">(facultatif)</span>
             <textarea
@@ -423,14 +504,12 @@ export function VehicleBooking({
             disabled={busy || quoting || !quote || !accepted}
           >
             {busy ? <Loader2 className="spin" size={18} /> : null}
-            {user
-              ? "Continuer vers le paiement"
-              : "Me connecter pour réserver"}
+            {user ? "Envoyer ma demande" : "Me connecter pour réserver"}
             <ArrowRight size={17} />
           </Button>
           <small className="payment-note">
-            <ShieldCheck size={13} /> Paiement simulé avant la demande. En cas
-            de refus par l’admin, remboursement simulé. Aucun débit réel.
+            <ShieldCheck size={13} /> Votre demande sera examinée par l’admin.
+            Le contrat sera disponible après son acceptation.
           </small>
         </form>
       </div>

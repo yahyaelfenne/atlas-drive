@@ -1,5 +1,4 @@
 import { streamChat } from "./chat-stream";
-import { PaymentPage, type CheckoutDraft } from "./PaymentPage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -42,11 +41,11 @@ import { Admin } from "./Admin";
 import { Agencies } from "./Agencies";
 import { AdminAgencies } from "./AdminAgencies";
 
-type Page = "home" | "fleet" | "bookings" | "agencies" | "admin" | "management" | "payment";
+type Page = "home" | "fleet" | "bookings" | "agencies" | "admin" | "management";
 const cities = ["Casablanca", "Marrakech", "Rabat", "Agadir"];
 const getPage = (): Page => {
   const p = location.hash.slice(1);
-  return ["fleet", "bookings", "agencies", "admin", "management", "payment"].includes(p)
+  return ["fleet", "bookings", "agencies", "admin", "management"].includes(p)
     ? (p as Page)
     : "home";
 };
@@ -77,7 +76,6 @@ export default function App() {
     [recommendOpen, setRecommendOpen] = useState(false),
     [recommended, setRecommended] = useState<number[] | null>(null),
     [recommendExplanation, setRecommendExplanation] = useState("");
-  const [checkout, setCheckout] = useState<CheckoutDraft | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => {
     const listener = () => {
@@ -259,10 +257,6 @@ export default function App() {
         </div>
       </header>
       <main>
-        {page === "payment" && <PaymentPage draft={checkout} user={user}
-          onBack={() => { if (checkout) setSelected(checkout.vehicle); navigate("fleet"); }}
-          onSuccess={(booking) => { setCheckout(null); loadFleet(); notify(`Demande ${booking.reference} envoyée. En attente de validation admin.`); navigate("bookings"); }} />}
-
         {page === "home" && user?.role !== "Admin" && (
           <>
             <section className="hero">
@@ -794,7 +788,9 @@ export default function App() {
             <button
               onClick={() => (user ? navigate("bookings") : setAuthOpen(true))}
             >
-              {user?.role === "Admin" ? "Locations clients" : "Mes réservations"}
+              {user?.role === "Admin"
+                ? "Locations clients"
+                : "Mes réservations"}
             </button>
           </div>
           <div>
@@ -854,7 +850,6 @@ export default function App() {
       />
       {selected && (
         <VehicleBooking
-          initialDraft={checkout?.vehicle.id === selected.id ? checkout : null}
           vehicle={selected}
           open={!!selected}
           onClose={() => setSelected(null)}
@@ -863,12 +858,21 @@ export default function App() {
           locations={locations}
           startDate={startDate}
           endDate={endDate}
-          onContinue={(draft) => {
-            setCheckout(draft); setSelected(null); navigate("payment");
+          onReserved={(booking) => {
+            setSelected(null);
+            loadFleet();
+            notify(
+              `Demande ${booking.reference} envoyée. En attente de validation admin.`,
+            );
+            navigate("bookings");
           }}
         />
       )}
-      <Chat key={user?.id || "guest"} open={chatOpen} onClose={() => setChatOpen(false)} />
+      <Chat
+        key={user?.id || "guest"}
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
       <Recommendation
         open={recommendOpen}
         onClose={() => setRecommendOpen(false)}
@@ -1117,7 +1121,9 @@ function AuthModal({
 }
 function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [language, setLanguage] = useState("auto");
-  const [messages, setMessages] = useState<{ role: string; text: string; source?: string }[]>([
+  const [messages, setMessages] = useState<
+      { role: string; text: string; source?: string }[]
+    >([
       {
         role: "assistant",
         text: "Bonjour ! Parlez-moi dans votre langue : location, voyage, traduction ou question générale.",
@@ -1137,14 +1143,33 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
     const message = value;
     setValue("");
     const answerIndex = messages.length + 1;
-    setMessages(m => [...m, { role: "user", text: message }, { role: "assistant", text: "" }]);
+    setMessages((m) => [
+      ...m,
+      { role: "user", text: message },
+      { role: "assistant", text: "" },
+    ]);
     setBusy(true);
     chatRequest.current = new AbortController();
     try {
-      await streamChat(API + "/api/chat/stream", {
-        message, language,
-        history: messages.slice(1).filter(m => m.text).slice(-8).map(m => ({ role: m.role, content: m.text.slice(0, 1800) })),
-      }, (text, source) => setMessages(m => m.map((item, i) => i === answerIndex ? { ...item, text, source } : item)), chatRequest.current.signal);
+      await streamChat(
+        API + "/api/chat/stream",
+        {
+          message,
+          language,
+          history: messages
+            .slice(1)
+            .filter((m) => m.text)
+            .slice(-8)
+            .map((m) => ({ role: m.role, content: m.text.slice(0, 1800) })),
+        },
+        (text, source) =>
+          setMessages((m) =>
+            m.map((item, i) =>
+              i === answerIndex ? { ...item, text, source } : item,
+            ),
+          ),
+        chatRequest.current.signal,
+      );
     } catch (e) {
       setMessages((m) => [
         ...m,
@@ -1169,7 +1194,19 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
           <X size={18} />
         </button>
       </div>
-      <button disabled={busy} onClick={() => setMessages([{ role: "assistant", text: "Bonjour ! Posez votre question dans votre langue." }])}>Nouvelle discussion</button>
+      <button
+        disabled={busy}
+        onClick={() =>
+          setMessages([
+            {
+              role: "assistant",
+              text: "Bonjour ! Posez votre question dans votre langue.",
+            },
+          ])
+        }
+      >
+        Nouvelle discussion
+      </button>
       <div className="chat-messages">
         <label>
           Langue / Language{" "}
@@ -1197,7 +1234,13 @@ function Chat({ open, onClose }: { open: boolean; onClose: () => void }) {
         {messages.map((m, i) => (
           <div key={i} dir="auto" className={"chat-message " + m.role}>
             {m.text || (busy ? "Préparation de la réponse…" : "")}
-            {m.source && <small style={{ display: "block", marginTop: 8 }}>{m.source === "openai" || m.source === "ollama" ? "Assistant conversationnel" : "Mode secours : aide location limitée"}</small>}
+            {m.source && (
+              <small style={{ display: "block", marginTop: 8 }}>
+                {m.source === "openai" || m.source === "ollama"
+                  ? "Assistant conversationnel"
+                  : "Mode secours : aide location limitée"}
+              </small>
+            )}
           </div>
         ))}
         {busy && (

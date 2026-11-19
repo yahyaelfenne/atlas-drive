@@ -219,7 +219,7 @@ export function Reservations({
                     <div className="row-actions">
                       {b.status === "Pending" && (
                         <p>
-                          Votre demande payée en test attend l’accord de
+                          Votre demande attend l’accord de
                           l’admin.
                         </p>
                       )}

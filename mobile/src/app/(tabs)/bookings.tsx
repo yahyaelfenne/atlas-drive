@@ -183,7 +183,7 @@ function CustomerBookings() {
               )}
               {booking.status === "Pending" && (
                 <Text style={styles.body}>
-                  Votre demande payée en test attend la validation admin.
+                  Votre demande attend la validation admin.
                 </Text>
               )}
               {Boolean(booking.contactEmail || booking.contactWhatsApp) && <Text style={styles.small}>Contrat ({booking.contractDeliveryChannel}) : {booking.contactWhatsApp || booking.contactEmail}{"\n"}{contractEmailLabel(booking.contractEmailStatus)}</Text>}

@@ -61,3 +61,5 @@ les rôles, la confidentialité, l’annuité, le taux zéro, les limites de pé
 les mensualités forcées, la persistance, les validations et l’archivage.
 Il crée sa propre voiture QA puis retire son profil et archive cette voiture.
 Le script est aussi intégré à `Verify.ps1` pour une base isolée.
+
+Depuis la suppression du paiement en ligne, les nouvelles réservations sont `Unpaid` et ne constituent pas des encaissements, même après acceptation admin. Les anciens paiements et remboursements restent comptabilisés selon les règles ci-dessus.
