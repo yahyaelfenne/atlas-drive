@@ -4108,3 +4108,232 @@ fieldset {
     width: 14px;
   }
 }
+.profit-view {
+  display: grid;
+  gap: 24px;
+  margin-top: 28px;
+}
+.profit-heading,
+.profit-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+.profit-heading h2 {
+  font-size: 32px;
+  letter-spacing: -1px;
+  margin: 8px 0;
+}
+.profit-heading p,
+.profit-explanation {
+  color: #73796e;
+  line-height: 1.65;
+  font-size: 13px;
+}
+.profit-month {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 185px;
+}
+.profit-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: #eef3e6;
+  padding: 20px 24px;
+  border: 1px solid #d8e3cb;
+  border-radius: 16px;
+  color: #35452d;
+}
+.profit-notice svg {
+  flex-shrink: 0;
+}
+.profit-notice p {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 6px 0 0;
+  max-width: 950px;
+}
+.profit-controls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.profit-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1px solid #c9d7b7;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #4b603b;
+}
+.profit-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.profit-stat {
+  border: 1px solid #e2e5dc;
+  border-radius: 16px;
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  background: #fff;
+}
+.profit-stat > span {
+  font-size: 12px;
+  color: #687160;
+}
+.profit-stat strong {
+  font-size: 27px;
+  letter-spacing: -1px;
+  white-space: nowrap;
+}
+.profit-stat small {
+  font-size: 10px;
+  color: #818776;
+}
+.profit-stat-dark {
+  background: #24382b;
+  color: #fff;
+  border-color: #24382b;
+}
+.profit-stat-dark > span,
+.profit-stat-dark small {
+  color: #c9d8bb;
+}
+.profit-table-wrap {
+  overflow: auto;
+  border: 1px solid #e1e5da;
+  border-radius: 16px;
+  background: white;
+}
+.profit-table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.profit-table th {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #818776;
+  background: #f7f8f3;
+  padding: 18px 16px;
+}
+.profit-table td {
+  padding: 18px 16px;
+  border-top: 1px solid #edf0e8;
+}
+.profit-table small {
+  display: block;
+  font-size: 10px;
+  color: #89907e;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+.profit-car {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.profit-car img {
+  width: 64px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.profit-positive {
+  color: #3c6948;
+}
+.profit-negative {
+  color: #a45b35;
+}
+.profit-table .button {
+  font-size: 11px;
+}
+.profit-form {
+  display: grid;
+  gap: 22px;
+}
+.profit-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.profit-form-grid label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+.profit-source {
+  background: #f1f5e9;
+  padding: 18px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.profit-source p {
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.profit-source a {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  text-decoration: underline;
+}
+.profit-check {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+.profit-explanation {
+  margin: 0;
+}
+.admin-tabs {
+  overflow: auto;
+}
+.admin-tabs button {
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .profit-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .profit-heading {
+    align-items: flex-start;
+  }
+  .profit-stat strong {
+    font-size: 24px;
+  }
+}
+@media (max-width: 600px) {
+  .profit-heading,
+  .profit-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .profit-heading h2 {
+    font-size: 27px;
+  }
+  .profit-stat {
+    padding: 16px;
+  }
+  .profit-stat strong {
+    font-size: 20px;
+  }
+  .profit-controls label {
+    flex-wrap: wrap;
+  }
+  .profit-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

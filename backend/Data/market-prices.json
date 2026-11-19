@@ -1,0 +1,100 @@
+[
+  {
+    "brand": "Renault",
+    "model": "Clio",
+    "price": 207500,
+    "source": "https://www.renault.ma/",
+    "label": "Renault Maroc — Clio, prix d’appel neuf"
+  },
+  {
+    "brand": "Dacia",
+    "model": "Duster",
+    "price": 232000,
+    "source": "https://www.dacia.ma/notre-gamme/suv-duster.html",
+    "label": "Dacia Maroc — Essential, prix d’appel neuf"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Golf 8",
+    "price": 329000,
+    "source": "https://www.volkswagen.ma/fr/nos-modeles/nouvelle-Golf8-fl.html",
+    "label": "Volkswagen Maroc — Golf 8 facelift, prix d’appel neuf"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "Classe C",
+    "price": 564000,
+    "source": "https://www.mercedes-benz.ma/models/c-class-w206-806-2/",
+    "label": "Mercedes-Benz Maroc — Classe C, prix d’appel neuf"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Tucson",
+    "price": 359900,
+    "source": "https://lautomobile.ma/voitures-neuves/hyundai/tucson",
+    "label": "L’Automobile Maroc — Tucson diesel, tarif indicatif neuf"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "208",
+    "price": 204100,
+    "source": "https://www.peugeot.ma/",
+    "label": "Peugeot Maroc — 208, prix d’appel neuf"
+  },
+  {
+    "brand": "BMW",
+    "model": "Série 3",
+    "price": 479900,
+    "source": "https://www.bmw.ma/fr/more-bmw/les-offres-elites-de-bmw.html",
+    "label": "BMW Maroc — offre 320d xDrive, sous conditions"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla",
+    "price": 293900,
+    "source": "https://www.toyota.co.ma/models",
+    "label": "Toyota Maroc — Corolla Sport, prix d’appel neuf"
+  },
+  {
+    "brand": "Dacia",
+    "model": "Sandero",
+    "price": 132000,
+    "source": "https://lautomobile.ma/voitures-neuves/dacia/sandero",
+    "label": "L’Automobile Maroc — Sandero, tarif indicatif neuf"
+  },
+  {
+    "brand": "Renault",
+    "model": "Captur",
+    "price": 261000,
+    "source": "https://www.renault.ma/",
+    "label": "Renault Maroc — Nouveau Captur, prix d’appel neuf"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "3008",
+    "price": 380000,
+    "source": "https://www.peugeot.ma/content/dam/peugeot/morocco/brochure/FT_PGT_NEW_3008.pdf",
+    "label": "Peugeot Maroc — New 3008 Allure Hybrid, tarif catalogue"
+  },
+  {
+    "brand": "Kia",
+    "model": "Sportage",
+    "price": 375000,
+    "source": "https://kia.ma/modeles/Sportage/specificites",
+    "label": "Kia Maroc — Sportage Active automatique, tarif neuf"
+  },
+  {
+    "brand": "Fiat",
+    "model": "500",
+    "price": 179500,
+    "source": "https://www.moteur.ma/fr/neuf/voiture/fiat/500/",
+    "label": "Moteur.ma — Fiat 500 essence, tarif indicatif neuf"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "i10",
+    "price": 168900,
+    "source": "https://autonews.ma/guide-auto/voitures-neuves/marque/hyundai/modele/94-hyundai-i10",
+    "label": "Autonews Maroc — i10 Attractive BVA, tarif indicatif neuf"
+  }
+]

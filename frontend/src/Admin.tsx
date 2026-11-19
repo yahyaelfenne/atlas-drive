@@ -1,4 +1,5 @@
 import { ManualWhatsApp } from "./ManualWhatsApp";
+import { Profitability } from "./Profitability";
 import { contractEmailLabel } from "./lib";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -29,7 +30,7 @@ import { Button } from "./components/ui/button";
 import { Input, Select } from "./components/ui/input";
 import { Modal } from "./components/ui/dialog";
 import { openContract } from "./Reservations";
-type Tab = "overview" | "bookings" | "fleet" | "notifications";
+type Tab = "overview" | "bookings" | "fleet" | "notifications" | "profitability";
 export function Admin({
   user,
   onLogin,
@@ -178,6 +179,7 @@ export function Admin({
               },
               { id: "bookings", label: "Réservations", icon: ClipboardList },
               { id: "fleet", label: "La flotte", icon: CarFront },
+              { id: "profitability", label: "Rentabilité", icon: TrendingUp },
               { id: "notifications", label: "Activité", icon: Bell },
             ] as const
           ).map((t) => (
@@ -196,6 +198,7 @@ export function Admin({
         </div>
       )}
       {error && <div className="form-error">{error}</div>}
+      {tab === "profitability" && <Profitability />}
       {loading && !dashboard ? (
         <div className="loading-state">
           <Loader2 className="spin" /> Chargement de votre agence…

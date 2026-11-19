@@ -381,6 +381,53 @@ namespace AtlasDrive.Api.Migrations
                     b.ToTable("Vehicles");
                 });
 
+            modelBuilder.Entity("AtlasDrive.Api.VehicleFinance", b =>
+                {
+                    b.Property<int>("VehicleId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("AnnualRate")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("DownPayment")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("Insurance")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<bool>("IsEstimate")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Maintenance")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("MonthlyPaymentOverride")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("Months")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OtherCosts")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("PurchasePrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateOnly>("StartMonth")
+                        .HasColumnType("date");
+
+                    b.HasKey("VehicleId");
+
+                    b.ToTable("VehicleFinances");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -546,6 +593,15 @@ namespace AtlasDrive.Api.Migrations
                     b.Navigation("User");
 
                     b.Navigation("Vehicle");
+                });
+
+            modelBuilder.Entity("AtlasDrive.Api.VehicleFinance", b =>
+                {
+                    b.HasOne("AtlasDrive.Api.Vehicle", null)
+                        .WithOne()
+                        .HasForeignKey("AtlasDrive.Api.VehicleFinance", "VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

@@ -42,6 +42,8 @@ try {
     $env:ATLAS_TEST_API = 'http://127.0.0.1:5181'
     & $pythonPath (Join-Path $PSScriptRoot 'test-integration.py')
     if ($LASTEXITCODE -ne 0) { throw 'Tests integration echoues.' }
+    & $pythonPath (Join-Path $PSScriptRoot 'test-profitability.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Tests rentabilite echoues.' }
 } finally {
     if ($testApi -and !$testApi.HasExited) { Stop-Process -Id $testApi.Id -Force; $testApi.WaitForExit() }
     & (Join-Path $pgBin 'dropdb.exe') -h 127.0.0.1 -p 5433 -U atlas --force $testDatabase

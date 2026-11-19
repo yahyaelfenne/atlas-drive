@@ -1,4 +1,5 @@
 import { ManualWhatsApp } from "./ManualWhatsApp";
+import { Profitability } from "./Profitability";
 import { contractEmailLabel } from "../lib/types";
 import { useCallback, useState } from "react";
 import {
@@ -190,12 +191,14 @@ export default function AdminPanel({
                 { label: "Vue d’ensemble", value: "dashboard" },
                 { label: "Réservations", value: "bookings" },
                 { label: "Flotte", value: "fleet" },
+                { label: "Rentabilité", value: "profitability" },
                 { label: "Activité", value: "activity" },
               ]}
             />
           )}
           <Button secondary title="Actualiser" busy={busy} onPress={load} />
           <ErrorMessage message={error} />
+          {tab === "profitability" && <Profitability />}
           {busy && !dashboard && <Loading />}
           {tab === "dashboard" && dashboard && (
             <>

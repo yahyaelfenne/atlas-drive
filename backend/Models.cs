@@ -94,9 +94,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<VehicleFinance> VehicleFinances => Set<VehicleFinance>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<VehicleFinance>().HasKey(f => f.VehicleId);
+        builder.Entity<VehicleFinance>().HasOne<Vehicle>().WithOne().HasForeignKey<VehicleFinance>(f => f.VehicleId).OnDelete(DeleteBehavior.Restrict);
+        foreach (var field in new[] { "PurchasePrice", "DownPayment", "AnnualRate", "Insurance", "Maintenance", "OtherCosts", "MonthlyPaymentOverride" })
+            builder.Entity<VehicleFinance>().Property(field).HasPrecision(12, 2);
         builder.Entity<Vehicle>().HasQueryFilter(v => !v.Archived);
         builder.Entity<Location>().HasQueryFilter(l => !l.Archived);
         builder.Entity<Vehicle>().Property(v => v.DailyRate).HasPrecision(12, 2);

@@ -208,6 +208,7 @@ bookings.MapPost("/{id:int}/cancel", async (int id, AppDbContext db, ClaimsPrinc
 
 var admin = app.MapGroup("/api/admin").RequireAuthorization(p => p.RequireRole("Admin"));
 app.MapWorkflow();
+app.MapProfitability();
 admin.MapGet("/dashboard", async (AppDbContext db) =>
 {
     var all = await RentalRules.Full(db).AsNoTracking().ToListAsync();
