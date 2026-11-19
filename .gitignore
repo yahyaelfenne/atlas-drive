@@ -13,3 +13,6 @@
 *.tsbuildinfo
 *.log
 .DS_Store
+# Local demo media
+/Atlas-Drive-Captures.zip
+/Atlas-Drive-Demonstration.mp4
