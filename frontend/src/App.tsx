@@ -76,10 +76,14 @@ export default function App() {
     [recommendOpen, setRecommendOpen] = useState(false),
     [recommended, setRecommended] = useState<number[] | null>(null),
     [recommendExplanation, setRecommendExplanation] = useState("");
+  const showCopilot =
+    user?.role !== "Admin" && page !== "admin" && page !== "management";
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => {
     const listener = () => {
-      setPage(getPage());
+      const nextPage = getPage();
+      setPage(nextPage);
+      if (nextPage === "admin" || nextPage === "management") setChatOpen(false);
       setMobile(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
@@ -795,9 +799,11 @@ export default function App() {
           </div>
           <div>
             <h4>On vous accompagne</h4>
-            <button onClick={() => setChatOpen(true)}>
-              Une question ? Parlons-en <ArrowUpRight size={13} />
-            </button>
+            {showCopilot && (
+              <button onClick={() => setChatOpen(true)}>
+                Une question ? Parlons-en <ArrowUpRight size={13} />
+              </button>
+            )}
             <span>Assistance 7 jours sur 7</span>
             <span>Casablanca · Maroc</span>
           </div>
@@ -822,14 +828,16 @@ export default function App() {
           </span>
         </div>
       </footer>
-      <button
-        className="chat-toggle"
-        onClick={() => setChatOpen(!chatOpen)}
-        aria-label="Ouvrir l’assistant"
-      >
-        {chatOpen ? <X size={23} /> : <MessageCircle size={24} />}
-        <span>Un coup de main ?</span>
-      </button>
+      {showCopilot && (
+        <button
+          className="chat-toggle"
+          onClick={() => setChatOpen(!chatOpen)}
+          aria-label="Ouvrir l’assistant"
+        >
+          {chatOpen ? <X size={23} /> : <MessageCircle size={24} />}
+          <span>Un coup de main ?</span>
+        </button>
+      )}
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={21} />
@@ -844,6 +852,7 @@ export default function App() {
         onClose={() => setAuthOpen(false)}
         onSuccess={(u) => {
           setUser(u);
+          if (u.role === "Admin") setChatOpen(false);
           setAuthOpen(false);
           notify(`Bienvenue ${u.fullName.split(" ")[0]} !`);
         }}
@@ -868,11 +877,13 @@ export default function App() {
           }}
         />
       )}
-      <Chat
-        key={user?.id || "guest"}
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-      />
+      {showCopilot && (
+        <Chat
+          key={user?.id || "guest"}
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
       <Recommendation
         open={recommendOpen}
         onClose={() => setRecommendOpen(false)}

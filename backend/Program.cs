@@ -111,7 +111,8 @@ app.MapGet("/api/vehicles", async (AppDbContext db, string? search, string? cate
     if (startDate.HasValue && endDate.HasValue)
     {
         RentalRules.Dates(startDate.Value, endDate.Value);
-        query = query.Where(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < endDate.Value && b.EndDate > startDate.Value));
+        var blocking = RentalRules.BlockingBookings(db.Bookings, startDate.Value, endDate.Value, RentalRules.Today);
+        query = query.Where(v => v.Status == "Available" && !blocking.Any(b => b.VehicleId == v.Id));
     }
     return await query.OrderBy(v => v.DailyRate).ToListAsync();
 });
@@ -121,7 +122,7 @@ app.MapPost("/api/quotes", async (QuoteInput input, AppDbContext db) =>
     var vehicle = await db.Vehicles.FindAsync(input.VehicleId) ?? throw new ApiException(404, "Véhicule introuvable.");
     if (vehicle.Status != "Available") throw new ApiException(409, "Véhicule en maintenance.");
     var quote = RentalRules.Quote(vehicle, input);
-    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Véhicule déjà réservé pour ces dates.");
+    if (await RentalRules.BlockingBookings(db.Bookings, input.StartDate, input.EndDate, RentalRules.Today).AnyAsync(b => b.VehicleId == input.VehicleId)) throw new ApiException(409, "Véhicule indisponible pour ces dates.");
     return quote;
 });
 
@@ -159,7 +160,7 @@ bookings.MapPost("", async (BookingInput input, AppDbContext db, ClaimsPrincipal
     }
     var vehicle = await db.Vehicles.FirstOrDefaultAsync(v => v.Id == input.VehicleId) ?? throw new ApiException(404, "Véhicule introuvable.");
     if (vehicle.Status != "Available") throw new ApiException(409, "Véhicule en maintenance.");
-    if (await db.Bookings.AnyAsync(b => b.VehicleId == input.VehicleId && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < input.EndDate && b.EndDate > input.StartDate)) throw new ApiException(409, "Ce véhicule vient d’être réservé pour ces dates. Choisissez un autre créneau.");
+    if (await RentalRules.BlockingBookings(db.Bookings, input.StartDate, input.EndDate, RentalRules.Today).AnyAsync(b => b.VehicleId == input.VehicleId)) throw new ApiException(409, "Ce véhicule est indisponible pour ces dates. Choisissez un autre créneau.");
     foreach (var locationId in new[] { input.PickupLocationId, input.ReturnLocationId }.Distinct().Order())
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(91501, {locationId})");
     var pickup = await db.Locations.FirstOrDefaultAsync(l => l.Id == input.PickupLocationId) ?? throw new ApiException(400, "Agence de départ invalide ou supprimée.");
@@ -215,7 +216,34 @@ admin.MapGet("/dashboard", async (AppDbContext db) =>
         .Select(b => (Date: b.CreatedAt, Amount: b.Total))
         .ToList();
     var months = Enumerable.Range(0, 6).Select(i => DateTime.UtcNow.AddMonths(i - 5)).Select(m => new { month = m.ToString("yyyy-MM"), revenue = receipts.Where(r => r.Date.Year == m.Year && r.Date.Month == m.Month).Sum(r => r.Amount) }).ToArray();
-    return new { totalRevenue = receipts.Sum(r => r.Amount), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !db.Bookings.Any(b => b.VehicleId == v.Id && (b.Status == "Pending" || b.Status == "Active" || b.Status == "Confirmed") && b.StartDate <= today && b.EndDate > today)), monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto) };
+    var blockingToday = RentalRules.BlockingBookings(db.Bookings, today, today.AddDays(1), today);
+    var availableVehicles = await db.Vehicles.CountAsync(v => v.Status == "Available" && !blockingToday.Any(b => b.VehicleId == v.Id));
+    var operations = new[]
+    {
+        Queue("overdue", all.Where(b => b.Status == "Active" && b.EndDate < today), b => b.EndDate, b => b.ReturnLocation.Name),
+        Queue("returns", all.Where(b => b.Status == "Active" && b.EndDate == today), b => b.EndDate, b => b.ReturnLocation.Name),
+        Queue("pickups", all.Where(b => b.Status == "Confirmed" && b.StartDate <= today && b.EndDate > today), b => b.StartDate, b => b.PickupLocation.Name),
+        Queue("missed", all.Where(b => b.Status == "Confirmed" && b.EndDate <= today), b => b.StartDate, b => b.PickupLocation.Name),
+        Queue("pending", all.Where(b => b.Status == "Pending"), b => b.StartDate, b => b.PickupLocation.Name),
+    };
+    return new { totalRevenue = receipts.Sum(r => r.Amount), totalBookings = all.Count, activeRentals = all.Count(b => b.Status == "Active"), availableVehicles, monthlyRevenue = months, recentBookings = all.OrderByDescending(b => b.CreatedAt).Take(8).Select(RentalRules.Dto), operations };
+
+    static object Queue(string kind, IEnumerable<Booking> source, Func<Booking, DateOnly> date, Func<Booking, string> location)
+    {
+        var sorted = source.OrderBy(date).ThenBy(b => b.Id).ToList();
+        return new
+        {
+            kind,
+            count = sorted.Count,
+            items = sorted.Take(5).Select(b => new
+            {
+                b.Reference,
+                vehicleName = b.Vehicle.Brand + " " + b.Vehicle.Model,
+                date = date(b),
+                location = location(b),
+            }),
+        };
+    }
 });
 admin.MapGet("/notifications", async (AppDbContext db) => await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAt).Take(100).ToListAsync());
 admin.MapPost("/vehicles", async (Vehicle input, AppDbContext db) =>

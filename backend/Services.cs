@@ -19,6 +19,12 @@ public class NotificationsHub : Hub;
 public static class RentalRules
 {
     public static DateOnly Today => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Africa/Casablanca")));
+    public static IQueryable<Booking> BlockingBookings(IQueryable<Booking> bookings, DateOnly start, DateOnly end, DateOnly today) =>
+        bookings.Where(b =>
+            (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") &&
+            b.StartDate < end &&
+            (b.EndDate > start || (b.Status == "Active" && b.EndDate <= today)));
+
     public static void Dates(DateOnly start, DateOnly end, bool allowPast = false)
     {
         if ((!allowPast && start < Today) || end <= start || end.DayNumber - start.DayNumber > 365)

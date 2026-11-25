@@ -7,4 +7,4 @@ if (Test-Path -LiteralPath $metadataPath) {
     if ($process -and $process.StartTime.ToUniversalTime().Ticks -eq ([datetime]$metadata.started).ToUniversalTime().Ticks) { Stop-Process -Id $process.Id -Force }
     Remove-Item -LiteralPath $metadataPath -Force
 }
-Write-Host 'Proxy mobile arrete. Dans le terminal Expo, utilisez Ctrl+C pour arreter Metro.'
+Write-Host 'Dans le terminal Expo, utilisez Ctrl+C pour arreter Expo et son relais API.'

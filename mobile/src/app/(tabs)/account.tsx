@@ -22,9 +22,7 @@ export default function Account() {
     setMessage("");
     try {
       await changeServer(server);
-      setMessage(
-        "Serveur enregistré. Reconnectez-vous à votre compte sur ce serveur.",
-      );
+      setMessage("Préférence de connexion enregistrée.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -101,11 +99,13 @@ export default function Account() {
             />
           )}
         </View>
-        <Button
-          secondary
-          title="Parler à l’assistant"
-          onPress={() => router.push("/chat")}
-        />
+        {user?.role !== "Admin" && (
+          <Button
+            secondary
+            title="Parler à l’assistant"
+            onPress={() => router.push("/chat")}
+          />
+        )}
         <ErrorMessage message={error} />
         {message ? (
           <Text accessibilityRole="alert" style={styles.body}>
@@ -115,8 +115,9 @@ export default function Account() {
         <View style={styles.card}>
           <Text style={styles.heading}>Connexion au serveur</Text>
           <Text style={styles.small}>
-            Pour un téléphone, utilisez l’adresse du PC sur le même Wi-Fi. Pour
-            une version distribuée, utilisez votre API HTTPS.
+            Expo Go utilise automatiquement le serveur qui a ouvert
+            l’application. Effacez le champ et enregistrez pour revenir à
+            l’adresse automatique.
           </Text>
           <Field
             label="Adresse du serveur"

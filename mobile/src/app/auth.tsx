@@ -42,7 +42,8 @@ export default function Auth() {
         },
       );
       await signIn(result);
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace("/account");
     } catch (e) {
       setError((e as Error).message);
     } finally {

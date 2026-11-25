@@ -30,7 +30,12 @@ import { Button } from "./components/ui/button";
 import { Input, Select } from "./components/ui/input";
 import { Modal } from "./components/ui/dialog";
 import { openContract } from "./Reservations";
-type Tab = "overview" | "bookings" | "fleet" | "notifications" | "profitability";
+type Tab =
+  | "overview"
+  | "bookings"
+  | "fleet"
+  | "notifications"
+  | "profitability";
 export function Admin({
   user,
   onLogin,
@@ -207,6 +212,16 @@ export function Admin({
         <>
           {tab === "overview" && dashboard && (
             <>
+              {dashboard.operations && (
+                <Operations
+                  queues={dashboard.operations}
+                  onOpen={(reference, nextStatus) => {
+                    setSearch(reference);
+                    setStatus(nextStatus);
+                    setTab("bookings");
+                  }}
+                />
+              )}
               <div className="stat-grid">
                 {[
                   {
@@ -591,8 +606,37 @@ function BookingTable({
                   <strong>{b.reference}</strong>
                   <span>{b.userName}</span>
                   <small>{b.userEmail}</small>
-                  {(b.contactEmail || b.contactWhatsApp) && <small>Contrat ({b.contractDeliveryChannel}) : {b.contactWhatsApp || b.contactEmail}<br />{contractEmailLabel(b.contractEmailStatus)}</small>}
-                  {["Failed", "WaitingConfiguration"].includes(b.contractEmailStatus) && <Button disabled={busy} onClick={async () => { setBusy(true); try { await post(`/api/admin/bookings/${b.id}/contract-email/retry`, {}); await onUpdated(); } catch (e) { notify((e as Error).message); } finally { setBusy(false); } }}>Réessayer l’envoi</Button>}
+                  {(b.contactEmail || b.contactWhatsApp) && (
+                    <small>
+                      Contrat ({b.contractDeliveryChannel}) :{" "}
+                      {b.contactWhatsApp || b.contactEmail}
+                      <br />
+                      {contractEmailLabel(b.contractEmailStatus)}
+                    </small>
+                  )}
+                  {["Failed", "WaitingConfiguration"].includes(
+                    b.contractEmailStatus,
+                  ) && (
+                    <Button
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await post(
+                            `/api/admin/bookings/${b.id}/contract-email/retry`,
+                            {},
+                          );
+                          await onUpdated();
+                        } catch (e) {
+                          notify((e as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Réessayer l’envoi
+                    </Button>
+                  )}
                 </td>
                 <td>
                   <strong>{b.vehicleName}</strong>
@@ -625,7 +669,17 @@ function BookingTable({
                     >
                       <FileText size={16} />
                     </Button>
-                    {["Confirmed", "Active", "Completed"].includes(b.status) && b.contactWhatsApp && <Button size="sm" variant="outline" disabled={busy} onClick={() => setManualWhatsApp(b)}>Envoyer le contrat sur WhatsApp</Button>}
+                    {["Confirmed", "Active", "Completed"].includes(b.status) &&
+                      b.contactWhatsApp && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => setManualWhatsApp(b)}
+                        >
+                          Envoyer le contrat sur WhatsApp
+                        </Button>
+                      )}
                     {b.status === "Pending" && (
                       <>
                         <Input
@@ -675,10 +729,74 @@ function BookingTable({
           )}
         </tbody>
       </table>
-      {manualWhatsApp && <ManualWhatsApp booking={manualWhatsApp} onClose={() => { setManualWhatsApp(null); void onUpdated(); }} />}
+      {manualWhatsApp && (
+        <ManualWhatsApp
+          booking={manualWhatsApp}
+          onClose={() => {
+            setManualWhatsApp(null);
+            void onUpdated();
+          }}
+        />
+      )}
     </div>
   );
 }
+const operationLabels = {
+  overdue: { title: "Retours en retard", status: "Active" },
+  returns: { title: "Retours aujourd’hui", status: "Active" },
+  pickups: { title: "Départs à traiter", status: "Confirmed" },
+  missed: { title: "Départs non effectués", status: "Confirmed" },
+  pending: { title: "Demandes à valider", status: "Pending" },
+};
+
+function Operations({
+  queues,
+  onOpen,
+}: {
+  queues: NonNullable<Dashboard["operations"]>;
+  onOpen: (reference: string, status: string) => void;
+}) {
+  return (
+    <section
+      className="chart-panel rental-operations"
+      aria-labelledby="operations-title"
+    >
+      <h3 id="operations-title">À traiter en agence</h3>
+      <div className="rental-operation-grid">
+        {queues.map(({ kind, count, items }) => (
+          <section className="rental-operation" key={kind}>
+            <h4>
+              {operationLabels[kind].title} <span>{count}</span>
+            </h4>
+            {items.map((item) => (
+              <button
+                key={item.reference}
+                type="button"
+                onClick={() => onOpen(item.reference, "")}
+              >
+                <strong>{item.vehicleName}</strong>
+                <small>
+                  {date(item.date)} · {item.location}
+                </small>
+                <small>{item.reference}</small>
+              </button>
+            ))}
+            {count > items.length && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpen("", operationLabels[kind].status)}
+              >
+                Ouvrir les locations
+              </Button>
+            )}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function RentalAction({
   booking,
   type,

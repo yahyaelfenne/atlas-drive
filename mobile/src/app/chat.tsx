@@ -1,5 +1,6 @@
 import { streamChat } from "../lib/chat-stream";
 import { useEffect, useRef, useState } from "react";
+import { Redirect } from "expo-router";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,6 +18,7 @@ interface Message {
 }
 export default function Chat() {
   const { user } = useApp();
+  if (user?.role === "Admin") return <Redirect href="/admin" />;
   return <Conversation key={user?.id || "guest"} />;
 }
 function Conversation() {

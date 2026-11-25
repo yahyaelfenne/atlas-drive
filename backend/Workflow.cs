@@ -19,7 +19,7 @@ public static class Workflow
             {
                 RentalRules.Dates(booking.StartDate, booking.EndDate);
                 if (booking.Vehicle.Archived || booking.Vehicle.Status != "Available") throw new ApiException(409, "Le véhicule n’est plus disponible.");
-                if (await db.Bookings.AnyAsync(b => b.Id != id && b.VehicleId == vehicleId && (b.Status == "Pending" || b.Status == "Confirmed" || b.Status == "Active") && b.StartDate < booking.EndDate && b.EndDate > booking.StartDate)) throw new ApiException(409, "Une autre réservation est déjà confirmée sur cette période.");
+                if (await RentalRules.BlockingBookings(db.Bookings, booking.StartDate, booking.EndDate, RentalRules.Today).AnyAsync(b => b.Id != id && b.VehicleId == vehicleId)) throw new ApiException(409, "Ce véhicule est indisponible pour cette période.");
             }
             if (input.Note?.Length > 1000) throw new ApiException(400, "Le motif est limité à 1000 caractères.");
             booking.Status = input.Approve ? "Confirmed" : "Rejected";

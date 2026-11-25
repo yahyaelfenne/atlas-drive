@@ -4,7 +4,7 @@ Application React Native + TypeScript pour Android et iPhone, avec Expo SDK 58 e
 
 ## Tester sur votre téléphone
 
-Dans VS Code, ouvrez `Terminal > Run Task > Location Ennour: application mobile`. Ou, depuis le dossier racine du projet, lancez
+Dans VS Code, ouvrez `Terminal > Run Task > Atlas Drive: application mobile`. Ou, depuis le dossier racine du projet, lancez
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-Mobile.ps1
@@ -12,16 +12,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-Mobile.ps1
 
 Pour une première installation des dépendances mobiles, ajoutez `-Install`.
 
-1. Installez Expo Go sur Android ou iPhone, dans une version compatible SDK 58.
+1. Installez Expo Go sur Android ou iPhone, dans une version compatible SDK 58. Sur iPhone, connectez-vous dans Expo Go avec le compte Expo utilisé par le serveur de développement.
 2. Connectez le téléphone et le PC au même Wi-Fi.
 3. Scannez le QR code affiché par Expo dans le terminal. Sur iPhone, utilisez l’appareil photo. Sur Android, utilisez Expo Go.
 4. Si iOS demande l’accès au réseau local, autorisez-le pour cette connexion au PC.
 
-Le script démarre les services existants puis un proxy de développement sur le port **5182**, accessible sur le réseau local. Il transmet les requêtes à l’API locale du PC sur **5180**. L’authentification et les rôles restent vérifiés par cette API. Aucune règle de pare-feu n’est créée automatiquement. Le téléphone doit pouvoir joindre le port 5182 du PC et Metro sur 8081.
+Le script vérifie les services locaux puis démarre Expo Go en mode LAN. Le téléphone utilise une seule adresse pour le code Expo et l’API, sur le port **8081**. L’URL de diagnostic affichée dans le terminal permet de vérifier la connexion depuis le navigateur du téléphone. Si le PC utilise plusieurs interfaces réseau, `-LanAddress` permet de sélectionner son adresse IPv4 Wi-Fi.
 
-Dans **Mon compte > Connexion au serveur**, vous pouvez modifier l’adresse et tester la connexion. Utilisez par exemple `http://192.168.1.4:5182`, selon l’adresse Wi-Fi affichée par le script. Sur un émulateur Android, utilisez `http://10.0.2.2:5182`. Un tunnel Expo ne publie pas automatiquement l’API.
+Dans **Mon compte > Connexion au serveur**, utilisez **Tester la connexion** pour vérifier l’API. Laissez le champ vide et enregistrez pour reprendre l’adresse fournie par Expo. Après la mise à jour depuis l’ancien mode à deux ports, reconnectez-vous à votre compte Location Ennour.
 
-Le fichier `.env.local`, ignoré par Git, peut définir `EXPO_PUBLIC_API_URL`. La valeur est une adresse publique de serveur, jamais une clé secrète. Le stockage de la session utilise SecureStore sur Android/iOS et sessionStorage pour l’aperçu navigateur.
+Le fichier `.env.local`, ignoré par Git, peut définir `EXPO_PUBLIC_API_URL` pour joindre un autre serveur. Laissez cette variable vide pour le test LAN automatique. Le stockage de la session utilise SecureStore sur Android/iOS et sessionStorage pour l’aperçu navigateur.
 
 ## Parcours disponibles
 
@@ -50,7 +50,7 @@ npx expo-doctor
 
 L’aperçu React Native Web sur `http://localhost:8081` sert à vérifier les écrans et les échanges API. Sur téléphone, les dates et le partage PDF utilisent les composants natifs. L’aperçu web permet de télécharger le contrat en HTML.
 
-Pour arrêter le serveur Expo, utilisez Ctrl+C dans son terminal. `scripts/Stop-Mobile.ps1` arrête le proxy mobile. Les services du site se contrôlent avec les scripts existants.
+Pour arrêter le serveur Expo, utilisez Ctrl+C dans son terminal. Les services du site se contrôlent avec les scripts existants.
 
 ## Générer les applications installables
 

@@ -32,36 +32,48 @@ interface AppContext {
   changeServer: (value: string) => Promise<void>;
 }
 const Context = createContext<AppContext | null>(null);
+const sessionKey = "atlas.session.v2";
+// Ignore old Expo overrides that pointed to the separate LAN proxy.
+const serverKey = __DEV__ ? "atlas.expo.server" : "atlas.server";
+type StoredSession = { server: string; session: Session };
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [baseUrl, setBaseUrl] = useState(defaultApiUrl);
   const [ready, setReady] = useState(false);
   const signOut = useCallback(async () => {
-    await write("atlas.session", null);
+    await write(sessionKey, null);
     setSession(null);
   }, []);
   useEffect(() => {
     let active = true;
     async function restore() {
       try {
-        const savedBase = await read("atlas.server");
-        const base = savedBase || defaultApiUrl;
-        const savedSession = await read("atlas.session");
+        const savedBase = await read(serverKey);
+        let base = defaultApiUrl;
+        if (savedBase) {
+          try {
+            base = validateApiUrl(savedBase);
+          } catch {
+            // Use the configured default if an old override is invalid.
+          }
+        }
+        const savedSession = await read(sessionKey);
         if (!active) return;
         setBaseUrl(base);
-        if (savedSession) {
-          const cached: Session = JSON.parse(savedSession);
+        if (base && savedSession) {
+          const cached: StoredSession = JSON.parse(savedSession);
+          if (cached.server !== base) return;
           try {
             const user = await request<User>(
               base,
-              cached.token,
+              cached.session.token,
               "/api/auth/me",
             );
-            if (active) setSession({ ...cached, user });
+            if (active) setSession({ ...cached.session, user });
           } catch (error) {
             if (error instanceof ApiError && error.status === 401)
-              await write("atlas.session", null);
-            else if (active) setSession(cached);
+              await write(sessionKey, null);
           }
         }
       } catch {
@@ -88,13 +100,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [baseUrl, token, signOut],
   );
   async function signIn(value: Session) {
-    await write("atlas.session", JSON.stringify(value));
+    await write(
+      sessionKey,
+      JSON.stringify({
+        server: baseUrl,
+        session: value,
+      } satisfies StoredSession),
+    );
     setSession(value);
   }
   async function changeServer(value: string) {
-    const base = validateApiUrl(value);
+    const base = value.trim() ? validateApiUrl(value) : defaultApiUrl;
+    if (base === baseUrl) {
+      await write(serverKey, value.trim() ? base : null);
+      return;
+    }
+    if (base) {
+      const health = await request<{ service: string; database: string }>(
+        base,
+        undefined,
+        "/api/health",
+      );
+      if (
+        health.service !== "Location Ennour API" ||
+        health.database !== "connected"
+      ) {
+        throw new Error(
+          "Cette adresse ne correspond pas à un serveur Location Ennour disponible.",
+        );
+      }
+    }
     await signOut();
-    await write("atlas.server", base);
+    await write(serverKey, value.trim() ? base : null);
     setBaseUrl(base);
   }
   return (

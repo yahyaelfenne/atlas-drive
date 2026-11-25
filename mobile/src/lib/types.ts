@@ -69,7 +69,12 @@ export interface Booking {
   total: number;
   deposit: number;
   status:
-    "Pending" | "Rejected" | "Confirmed" | "Active" | "Completed" | "Cancelled";
+    | "Pending"
+    | "Rejected"
+    | "Confirmed"
+    | "Active"
+    | "Completed"
+    | "Cancelled";
   contractDeliveryChannel: "email" | "whatsapp";
   contactWhatsApp: string;
   whatsAppMessageId: string | null;
@@ -90,6 +95,16 @@ export interface Dashboard {
   availableVehicles: number;
   monthlyRevenue: { month: string; revenue: number }[];
   recentBookings: Booking[];
+  operations?: {
+    kind: "overdue" | "returns" | "pickups" | "missed" | "pending";
+    count: number;
+    items: {
+      reference: string;
+      vehicleName: string;
+      date: string;
+      location: string;
+    }[];
+  }[];
 }
 export const money = (amount: number) =>
   `${new Intl.NumberFormat("fr-MA", { maximumFractionDigits: 2 }).format(amount)} MAD`;
@@ -118,9 +133,25 @@ export const cities = ["Casablanca", "Marrakech", "Rabat", "Agadir"];
 export const categories = ["Citadine", "Berline", "SUV", "Premium"];
 
 export function contractEmailLabel(status: string) {
-  return ({ NotQueued: "Le contrat sera envoyé après acceptation.", Pending: "Contrat : envoi en attente.",
-    WaitingConfiguration: "Contrat : en attente de connexion du service d’envoi.", Sent: "Contrat envoyé au serveur de messagerie.",
-    ManualRequired: "Contrat à envoyer manuellement sur WhatsApp par l’agence.", ManualPrepared: "Message WhatsApp préparé ; envoi manuel à confirmer par l’agence.",
-    AcceptedByProvider: "Message accepté par WhatsApp ; réception non confirmée.", Uncertain: "Résultat d’envoi inconnu : l’agence doit vérifier avant de renvoyer.",
-    Failed: "Envoi du contrat en échec : contactez l’agence.", Cancelled: "Envoi du contrat annulé." } as Record<string, string>)[status] || "";
+  return (
+    (
+      {
+        NotQueued: "Le contrat sera envoyé après acceptation.",
+        Pending: "Contrat : envoi en attente.",
+        WaitingConfiguration:
+          "Contrat : en attente de connexion du service d’envoi.",
+        Sent: "Contrat envoyé au serveur de messagerie.",
+        ManualRequired:
+          "Contrat à envoyer manuellement sur WhatsApp par l’agence.",
+        ManualPrepared:
+          "Message WhatsApp préparé ; envoi manuel à confirmer par l’agence.",
+        AcceptedByProvider:
+          "Message accepté par WhatsApp ; réception non confirmée.",
+        Uncertain:
+          "Résultat d’envoi inconnu : l’agence doit vérifier avant de renvoyer.",
+        Failed: "Envoi du contrat en échec : contactez l’agence.",
+        Cancelled: "Envoi du contrat annulé.",
+      } as Record<string, string>
+    )[status] || ""
+  );
 }

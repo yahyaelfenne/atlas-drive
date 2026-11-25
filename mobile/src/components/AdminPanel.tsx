@@ -35,6 +35,13 @@ interface Notice {
   message: string;
   createdAt: string;
 }
+const operationLabels = {
+  overdue: { title: "Retours en retard", status: "Active" },
+  returns: { title: "Retours aujourd’hui", status: "Active" },
+  pickups: { title: "Départs à traiter", status: "Confirmed" },
+  missed: { title: "Départs non effectués", status: "Confirmed" },
+  pending: { title: "Demandes à valider", status: "Pending" },
+};
 export default function AdminPanel({
   fixedTab,
 }: { fixedTab?: "bookings" | "fleet" } = {}) {
@@ -202,6 +209,46 @@ export default function AdminPanel({
           {busy && !dashboard && <Loading />}
           {tab === "dashboard" && dashboard && (
             <>
+              {dashboard.operations && (
+                <View style={styles.card}>
+                  <Text style={styles.heading}>À traiter en agence</Text>
+                  {dashboard.operations.map(({ kind, count, items }) => (
+                    <View key={kind} style={{ gap: 8 }}>
+                      <Text style={styles.body}>
+                        {operationLabels[kind].title} · {count}
+                      </Text>
+                      {items.map((item) => (
+                        <View key={item.reference} style={styles.card}>
+                          <Text style={styles.heading}>{item.vehicleName}</Text>
+                          <Text style={styles.small}>
+                            {dateLabel(item.date)} · {item.location}
+                          </Text>
+                          <Button
+                            secondary
+                            title={`Ouvrir ${item.reference}`}
+                            onPress={() => {
+                              setQuery(item.reference);
+                              setStatus("");
+                              setTab("bookings");
+                            }}
+                          />
+                        </View>
+                      ))}
+                      {count > items.length && (
+                        <Button
+                          secondary
+                          title="Ouvrir les locations"
+                          onPress={() => {
+                            setQuery("");
+                            setStatus(operationLabels[kind].status);
+                            setTab("bookings");
+                          }}
+                        />
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
               {[
                 [
                   money(dashboard.totalRevenue),
@@ -302,14 +349,54 @@ export default function AdminPanel({
                       {booking.pickupLocationName} →{" "}
                       {booking.returnLocationName}
                     </Text>
-                    {Boolean(booking.contactEmail || booking.contactWhatsApp) && <Text style={styles.small}>Contrat ({booking.contractDeliveryChannel}) : {booking.contactWhatsApp || booking.contactEmail}{"\n"}{contractEmailLabel(booking.contractEmailStatus)}</Text>}
-                    {["Failed", "WaitingConfiguration"].includes(booking.contractEmailStatus) && <Button title="Réessayer l’envoi du contrat" disabled={actionBusy} onPress={async () => { setActionBusy(true); try { await api(`/api/admin/bookings/${booking.id}/contract-email/retry`, { method: "POST" }); await load(); } catch (e) { setError((e as Error).message); } finally { setActionBusy(false); } }} />}
+                    {Boolean(
+                      booking.contactEmail || booking.contactWhatsApp,
+                    ) && (
+                      <Text style={styles.small}>
+                        Contrat ({booking.contractDeliveryChannel}) :{" "}
+                        {booking.contactWhatsApp || booking.contactEmail}
+                        {"\n"}
+                        {contractEmailLabel(booking.contractEmailStatus)}
+                      </Text>
+                    )}
+                    {["Failed", "WaitingConfiguration"].includes(
+                      booking.contractEmailStatus,
+                    ) && (
+                      <Button
+                        title="Réessayer l’envoi du contrat"
+                        disabled={actionBusy}
+                        onPress={async () => {
+                          setActionBusy(true);
+                          try {
+                            await api(
+                              `/api/admin/bookings/${booking.id}/contract-email/retry`,
+                              { method: "POST" },
+                            );
+                            await load();
+                          } catch (e) {
+                            setError((e as Error).message);
+                          } finally {
+                            setActionBusy(false);
+                          }
+                        }}
+                      />
+                    )}
                     {Boolean(booking.reviewNote) && (
                       <Text style={styles.small}>
                         Message au client : {booking.reviewNote}
                       </Text>
                     )}
-                    {["Confirmed", "Active", "Completed"].includes(booking.status) && Boolean(booking.contactWhatsApp) && <Button title="Envoyer le contrat sur WhatsApp" secondary disabled={actionBusy} onPress={() => setManualWhatsApp(booking)} />}
+                    {["Confirmed", "Active", "Completed"].includes(
+                      booking.status,
+                    ) &&
+                      Boolean(booking.contactWhatsApp) && (
+                        <Button
+                          title="Envoyer le contrat sur WhatsApp"
+                          secondary
+                          disabled={actionBusy}
+                          onPress={() => setManualWhatsApp(booking)}
+                        />
+                      )}
                     {booking.status === "Pending" && (
                       <>
                         <Field
@@ -428,7 +515,15 @@ export default function AdminPanel({
           )}
         </View>
       </ScrollView>
-      {manualWhatsApp && <ManualWhatsApp booking={manualWhatsApp} onClose={() => { setManualWhatsApp(null); void load(); }} />}
+      {manualWhatsApp && (
+        <ManualWhatsApp
+          booking={manualWhatsApp}
+          onClose={() => {
+            setManualWhatsApp(null);
+            void load();
+          }}
+        />
+      )}
       <Modal
         visible={Boolean(removing)}
         transparent
